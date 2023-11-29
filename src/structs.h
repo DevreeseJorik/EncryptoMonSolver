@@ -90,6 +90,6 @@ struct Pokemon {
 
 #define MAX_ITEMS 0x1D0 
 #define MAX_MOVES 0x1D3
-
+#define MAX_EVS 510
 
 #endif // STRUCTS_H

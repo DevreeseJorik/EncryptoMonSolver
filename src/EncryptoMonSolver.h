@@ -16,6 +16,10 @@ private:
     // Tweak the items of the Pokemon
     void tweakItems(Pokemon& pokemon, EncryptoMon& encryptoMon, TweakConfig& config);
 
+    void tweakEffortValues(Pokemon& pokemon, EncryptoMon& encryptoMon, TweakConfig& config);
+
+    void generateEffortValueCombination(Pokemon& pokemon, EncryptoMon& encryptoMon, TweakConfig& config, uint8_t* Evs, uint8_t EvId);
+
     // Tweak the moves of the Pokemon
     void tweakMoves(Pokemon& pokemon, EncryptoMon& encryptoMon, TweakConfig& config);
 
@@ -24,6 +28,9 @@ private:
 
     // Check if a specific sequence is present at a given offset in the Pokemon's data
     bool checkSequence(Pokemon& pokemon, uint8_t* seq, uint8_t seq_len, uint8_t offs);
+
+    // Perform multiple sequence checks
+    void checkSequences(Pokemon& preEncryptPokemon, Pokemon& postEncryptPokemon, EncryptoMon& encryptoMon, TweakConfig& config);
 };
 
 #endif // ENCRYPTOMONSOLVER_H
