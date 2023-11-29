@@ -45,6 +45,8 @@ public:
     void calculateChecksum(Pokemon& pokemon);
 
     void setItem(Pokemon& pokemon, uint16_t item);
+
+    uint8_t* getEffortValuePointer(Pokemon& pokemon);
 };
 
 

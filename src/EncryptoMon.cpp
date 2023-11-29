@@ -154,7 +154,7 @@ void EncryptoMon::shuffleBlocks(Pokemon& pokemon) {
 // Function to unshuffle the order of blocks
 void EncryptoMon::unshuffleBlocks(Pokemon& pokemon) {
     // Implement logic to revert the order of blocks to the original state
-    // You may need to store the original order before shuffling
+    // Not implemented cuz it's not necessary atm
 }
 
 void EncryptoMon::calculateChecksum(Pokemon& pokemon) {
@@ -171,6 +171,9 @@ void EncryptoMon::calculateChecksum(Pokemon& pokemon) {
 void EncryptoMon::setItem(Pokemon& pokemon, uint16_t item) {
     BlockA* blockA = getBlockAPreShuffle(pokemon);
     blockA->heldItem = item;
-    // DEBUG
-    // dumpBinaryPokemon("test_setitem_" + std::to_string(item) + ".bin", pokemon);
+}
+
+uint8_t* EncryptoMon::getEffortValuePointer(Pokemon& pokemon) {
+    BlockA* blockA = getBlockAPreShuffle(pokemon);
+    return &(blockA->hpEVs);
 }
