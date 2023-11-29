@@ -88,4 +88,8 @@ struct Pokemon {
     Block block_data[4];
 };
 
+#define MAX_ITEMS 0x1D0 
+#define MAX_MOVES 0x1D3
+
+
 #endif // STRUCTS_H
