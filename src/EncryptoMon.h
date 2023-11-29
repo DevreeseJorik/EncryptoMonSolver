@@ -6,9 +6,9 @@
 
 class EncryptoMon {
 public:
-    bool loadBinaryPokemon(const std::string& fileName, Pokemon& pokemon);
+    bool loadBinaryPokemon(const std::string& filePath, Pokemon& pokemon);
 
-    bool dumpBinaryPokemon(const std::string& fileName, const Pokemon& pokemon);
+    bool dumpBinaryPokemon(const std::string& filePath, const Pokemon& pokemon);
 
     void preparePokemon(Pokemon& pokemon);
 
@@ -44,7 +44,7 @@ public:
 
     void calculateChecksum(Pokemon& pokemon);
 
-    bool checkSequence(Pokemon& pokemon, uint8_t* seq, uint8_t seq_len, uint8_t offs);
+    void setItem(Pokemon& pokemon, uint16_t item);
 };
 
 

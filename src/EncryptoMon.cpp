@@ -3,13 +3,13 @@
 #include "EncryptoMon.h"
 
 // Function to load binary data into a Pokemon struct
-bool EncryptoMon::loadBinaryPokemon(const std::string& fileName, Pokemon& pokemon) {
+bool EncryptoMon::loadBinaryPokemon(const std::string& filePath, Pokemon& pokemon) {
     // Open the binary file in input mode
-    std::ifstream file(fileName, std::ios::binary);
+    std::ifstream file(filePath, std::ios::binary);
 
     // Check if the file is open
     if (!file.is_open()) {
-        std::cerr << "Error opening file: " << fileName << std::endl;
+        std::cerr << "Error opening file: " << filePath << std::endl;
         return false;
     }
 
@@ -23,13 +23,13 @@ bool EncryptoMon::loadBinaryPokemon(const std::string& fileName, Pokemon& pokemo
 }
 
 // Function to dump a Pokemon struct into a binary file
-bool EncryptoMon::dumpBinaryPokemon(const std::string& fileName, const Pokemon& pokemon) {
+bool EncryptoMon::dumpBinaryPokemon(const std::string& filePath, const Pokemon& pokemon) {
     // Open the binary file in output mode
-    std::ofstream file(fileName, std::ios::binary);
+    std::ofstream file(filePath, std::ios::binary);
 
     // Check if the file is open
     if (!file.is_open()) {
-        std::cerr << "Error opening file: " << fileName << std::endl;
+        std::cerr << "Error opening file: " << filePath << std::endl;
         return false;
     }
 
@@ -38,7 +38,7 @@ bool EncryptoMon::dumpBinaryPokemon(const std::string& fileName, const Pokemon& 
 
     // Check if the write operation was successful
     if (!file) {
-        std::cerr << "Error writing data to file: " << fileName << std::endl;
+        std::cerr << "Error writing data to file: " << filePath << std::endl;
         return false;
     }
 
@@ -56,8 +56,11 @@ void EncryptoMon::preparePokemon(Pokemon& pokemon) {
 
 // Function to process the entire input pokemon to encrypted state
 void EncryptoMon::processPokemon(Pokemon& pokemon) {
-    preparePokemon(pokemon);
+    calculateChecksum(pokemon);
+    //dumpBinaryPokemon("poke_output/poke_" + std::to_string(pokemon.checksum) + ".bin", pokemon);
+    shuffleBlocks(pokemon);
     encryptPokemon(pokemon);
+    //dumpBinaryPokemon("poke_output/poke_" + std::to_string(pokemon.checksum) + "enc.bin", pokemon);
 }
 
 // Function to encrypt Pokémon data
@@ -91,39 +94,39 @@ uint8_t* EncryptoMon::getBlockIds(Pokemon& pokemon) {
 }
 
 BlockA* EncryptoMon::getBlockAPreShuffle(Pokemon& pokemon) {
-    return &pokemon.block_data[0];
+    return reinterpret_cast<BlockA*>(&pokemon.block_data[0]);
 }
 
 BlockB* EncryptoMon::getBlockBPreShuffle(Pokemon& pokemon) {
-    return &pokemon.block_data[1];
+    return reinterpret_cast<BlockB*>(&pokemon.block_data[1]);
 }
 
 BlockC* EncryptoMon::getBlockCPreShuffle(Pokemon& pokemon) {
-    return &pokemon.block_data[2];
+    return reinterpret_cast<BlockC*>(&pokemon.block_data[2]);
 }
 
 BlockD* EncryptoMon::getBlockDPreShuffle(Pokemon& pokemon) {
-    return &pokemon.block_data[3];
+    return reinterpret_cast<BlockD*>(&pokemon.block_data[3]);
 }
 
 BlockA* EncryptoMon::getBlockAAfterShuffle(Pokemon& pokemon) {
     uint8_t order = getBlockOrder(pokemon);
-    return &pokemon.block_data[blockAPositions[order]];
+    return reinterpret_cast<BlockA*>(&pokemon.block_data[blockAPositions[order]]);
 }
 
 BlockB* EncryptoMon::getBlockBAfterShuffle(Pokemon& pokemon) {
     uint8_t order = getBlockOrder(pokemon);
-    return &pokemon.block_data[blockBPositions[order]];
+    return reinterpret_cast<BlockB*>(&pokemon.block_data[blockBPositions[order]]);
 }
 
 BlockC* EncryptoMon::getBlockCAfterShuffle(Pokemon& pokemon) {
     uint8_t order = getBlockOrder(pokemon);
-    return &pokemon.block_data[blockCPositions[order]];
+    return reinterpret_cast<BlockC*>(&pokemon.block_data[blockCPositions[order]]);
 }
 
 BlockD* EncryptoMon::getBlockDAfterShuffle(Pokemon& pokemon) {
     uint8_t order = getBlockOrder(pokemon);
-    return &pokemon.block_data[blockDPositions[order]];
+    return reinterpret_cast<BlockD*>(&pokemon.block_data[blockDPositions[order]]);
 }
 
 // Function to get Block Order
@@ -165,18 +168,9 @@ void EncryptoMon::calculateChecksum(Pokemon& pokemon) {
     pokemon.checksum = checksum;
 }
 
-bool EncryptoMon::checkSequence(Pokemon& pokemon, uint8_t* seq, uint8_t seq_len, uint8_t offs) {
-    // Treat the entire Pokemon structure as a uint8_t array
-    uint8_t* pokemonBytes = reinterpret_cast<uint8_t*>(&pokemon);
-
-    // Check if the sequence at the specified offset matches the given sequence
-    for (uint8_t i = 0; i < seq_len; ++i) {
-        if (pokemonBytes[offs + i] != seq[i]) {
-            // Sequence mismatch
-            return false;
-        }
-    }
-
-    // Sequence matches
-    return true;
+void EncryptoMon::setItem(Pokemon& pokemon, uint16_t item) {
+    BlockA* blockA = getBlockAPreShuffle(pokemon);
+    blockA->heldItem = item;
+    // DEBUG
+    // dumpBinaryPokemon("test_setitem_" + std::to_string(item) + ".bin", pokemon);
 }
