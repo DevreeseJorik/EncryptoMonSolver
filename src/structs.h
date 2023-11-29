@@ -34,16 +34,16 @@ struct BlockA {
     uint8_t smartContestStat;
     uint8_t toughContestStat;
     uint8_t sheen;
-    uint8_t sinnohRibbonsSet1[4];
+    uint32_t sinnohRibbonsSet1;
 };
 
 // Block B
 struct BlockB {
-    uint8_t moveset[8];
+    uint16_t moveset[4];
     uint8_t movePP[4];
     uint8_t movePPUps[4];
     uint32_t individualValues;
-    uint8_t hoennRibbonSet;
+    uint32_t hoennRibbonSet;
     uint8_t flags;
     uint8_t shinyLeaves;
     uint8_t unused[2];
@@ -53,26 +53,23 @@ struct BlockB {
 
 // Block C
 struct BlockC {
-    uint16_t nickname[22];
+    uint16_t nickname[11];
     uint8_t unused;
     uint8_t gameOfOrigin;
-    uint16_t sinnohRibbonsSet2;
+    uint32_t sinnohRibbonsSet2;
     uint8_t unused2[4];
 };
 
 // Block D
 struct BlockD {
-    uint16_t otName[16];
-    uint16_t dateEggReceived;
-    uint16_t dateMet;
+    uint16_t otName[8];
+    uint8_t dateEggReceived[3];
+    uint8_t dateMet[3];
     uint16_t diamondPearlEggLocation;
     uint16_t diamondPearlMetAtLocation;
     uint8_t pokerus;
     uint8_t pokeBall;
-    uint8_t metAtLevel;
-    uint8_t genderAndForms;
-    uint8_t shinyLeavesHGSS;
-    uint8_t unused;
+    uint8_t metAtLevelandGender;
     uint8_t encounterType;
     uint8_t hgssPokeBall;
     uint8_t performance;
