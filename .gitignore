@@ -1,4 +1,6 @@
 # .gitignore
-
-/output
+/output/temp
+/output/encryptomon.exe
+/output/poke.bin
+/output/poke_output/*
 /.vs
