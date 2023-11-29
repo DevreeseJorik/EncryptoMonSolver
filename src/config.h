@@ -7,6 +7,8 @@
 struct TweakConfig {
     bool tweakItems;
     bool tweakMoves;
+    bool tweakEffortValues;
+    bool resetEffortValues;
 };
 
 class Config {

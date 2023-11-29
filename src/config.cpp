@@ -17,6 +17,12 @@ void Config::loadTweakEnvFile(const std::string& filePath, TweakConfig& config) 
             else if (key == "TWEAK_MOVES") {
                 config.tweakMoves = (value == "TRUE");
             }
+            else if (key == "TWEAK_EVS") {
+                config.tweakEffortValues = (value == "TRUE");
+            }
+            else if (key == "RESET_EVS") {
+                config.resetEffortValues = (value == "TRUE");
+            }
             // Add more keys if needed
         }
     }
