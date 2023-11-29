@@ -1,4 +1,5 @@
 #include "EncryptoMon.h"
+#include <iostream>
 
 int main() {
     EncryptoMon encryptoMon;
@@ -6,11 +7,7 @@ int main() {
 
     // Load Pokemon data from binary file
     if (encryptoMon.loadBinaryPokemon(R"(poke.bin)", test)) {
-        encryptoMon.preparePokemon(test);
-        //encryptoMon.calculateChecksum(test);
-        // Encrypt Pokemon data
-        encryptoMon.EncryptPokemon(test);
-
+        encryptoMon.processPokemon(test);
         // Save encrypted Pokemon data to a new file
         encryptoMon.dumpBinaryPokemon(R"(enc_poke.bin)", test);
     }
