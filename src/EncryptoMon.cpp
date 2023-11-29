@@ -51,12 +51,17 @@ bool EncryptoMon::dumpBinaryPokemon(const std::string& fileName, const Pokemon& 
 // Function to prepare for encryption, by calculating checksum, shuffling blocks
 void EncryptoMon::preparePokemon(Pokemon& pokemon) {
     calculateChecksum(pokemon);
-    ShuffleBlocks(pokemon);
+    shuffleBlocks(pokemon);
+}
+
+// Function to process the entire input pokemon to encrypted state
+void EncryptoMon::processPokemon(Pokemon& pokemon) {
+    preparePokemon(pokemon);
+    encryptPokemon(pokemon);
 }
 
 // Function to encrypt Pokémon data
-void EncryptoMon::EncryptPokemon(Pokemon& pokemon) {
-    // Implement your encryption logic here
+void EncryptoMon::encryptPokemon(Pokemon& pokemon) {
     // You can modify the pokemon.blocks array or other fields as needed
         /* LCRNG is seeded with the Checksum */
     /* Advance the LCRNG, XOR its 16 most significant bits with each 16-bit word of ABCD Block data */
@@ -70,14 +75,12 @@ void EncryptoMon::EncryptPokemon(Pokemon& pokemon) {
 }
 
 // Function to decrypt Pokémon data
-void EncryptoMon::DecryptPokemon(Pokemon& pokemon) {
-    // Implement your decryption logic here
-    // You can modify the pokemon.blocks array or other fields as needed
-    EncryptPokemon(pokemon);
+void EncryptoMon::decryptPokemon(Pokemon& pokemon) {
+    encryptPokemon(pokemon);
 }
 
-uint8_t* EncryptoMon::GetBlockIds(Pokemon& pokemon) {
-    uint8_t order = GetBlockOrder(pokemon);
+uint8_t* EncryptoMon::getBlockIds(Pokemon& pokemon) {
+    uint8_t order = getBlockOrder(pokemon);
     uint8_t* blockIds = new uint8_t[4] {
         blockAPositions[order],
         blockBPositions[order],
@@ -87,14 +90,50 @@ uint8_t* EncryptoMon::GetBlockIds(Pokemon& pokemon) {
     return blockIds;
 }
 
+BlockA* EncryptoMon::getBlockAPreShuffle(Pokemon& pokemon) {
+    return &pokemon.block_data[0];
+}
+
+BlockB* EncryptoMon::getBlockBPreShuffle(Pokemon& pokemon) {
+    return &pokemon.block_data[1];
+}
+
+BlockC* EncryptoMon::getBlockCPreShuffle(Pokemon& pokemon) {
+    return &pokemon.block_data[2];
+}
+
+BlockD* EncryptoMon::getBlockDPreShuffle(Pokemon& pokemon) {
+    return &pokemon.block_data[3];
+}
+
+BlockA* EncryptoMon::getBlockAAfterShuffle(Pokemon& pokemon) {
+    uint8_t order = getBlockOrder(pokemon);
+    return &pokemon.block_data[blockAPositions[order]];
+}
+
+BlockB* EncryptoMon::getBlockBAfterShuffle(Pokemon& pokemon) {
+    uint8_t order = getBlockOrder(pokemon);
+    return &pokemon.block_data[blockBPositions[order]];
+}
+
+BlockC* EncryptoMon::getBlockCAfterShuffle(Pokemon& pokemon) {
+    uint8_t order = getBlockOrder(pokemon);
+    return &pokemon.block_data[blockCPositions[order]];
+}
+
+BlockD* EncryptoMon::getBlockDAfterShuffle(Pokemon& pokemon) {
+    uint8_t order = getBlockOrder(pokemon);
+    return &pokemon.block_data[blockDPositions[order]];
+}
+
 // Function to get Block Order
-uint8_t EncryptoMon::GetBlockOrder(Pokemon& pokemon) {
+uint8_t EncryptoMon::getBlockOrder(Pokemon& pokemon) {
     return ((pokemon.pid & 0x3E000) >> 13) % 24;
 }
 
 // Function to shuffle the order of blocks
-void EncryptoMon::ShuffleBlocks(Pokemon& pokemon) {
-    uint8_t* blockIds = GetBlockIds(pokemon);
+void EncryptoMon::shuffleBlocks(Pokemon& pokemon) {
+    uint8_t* blockIds = getBlockIds(pokemon);
 
     // Rearrange the block_data array based on the new order
     Block temp[4];
@@ -110,7 +149,7 @@ void EncryptoMon::ShuffleBlocks(Pokemon& pokemon) {
 }
 
 // Function to unshuffle the order of blocks
-void EncryptoMon::UnshuffleBlocks(Pokemon& pokemon) {
+void EncryptoMon::unshuffleBlocks(Pokemon& pokemon) {
     // Implement logic to revert the order of blocks to the original state
     // You may need to store the original order before shuffling
 }
@@ -124,4 +163,20 @@ void EncryptoMon::calculateChecksum(Pokemon& pokemon) {
         checksum += data[i];
     }
     pokemon.checksum = checksum;
+}
+
+bool EncryptoMon::checkSequence(Pokemon& pokemon, uint8_t* seq, uint8_t seq_len, uint8_t offs) {
+    // Treat the entire Pokemon structure as a uint8_t array
+    uint8_t* pokemonBytes = reinterpret_cast<uint8_t*>(&pokemon);
+
+    // Check if the sequence at the specified offset matches the given sequence
+    for (uint8_t i = 0; i < seq_len; ++i) {
+        if (pokemonBytes[offs + i] != seq[i]) {
+            // Sequence mismatch
+            return false;
+        }
+    }
+
+    // Sequence matches
+    return true;
 }

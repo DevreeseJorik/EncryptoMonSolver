@@ -12,19 +12,39 @@ public:
 
     void preparePokemon(Pokemon& pokemon);
 
-    void EncryptPokemon(Pokemon& pokemon);
+    void processPokemon(Pokemon& pokemon);
 
-    void DecryptPokemon(Pokemon& pokemon);
+    void encryptPokemon(Pokemon& pokemon);
 
-    uint8_t* GetBlockIds(Pokemon& pokemon);
+    void decryptPokemon(Pokemon& pokemon);
 
-    uint8_t GetBlockOrder(Pokemon& pokemon);
+    uint8_t* getBlockIds(Pokemon& pokemon);
 
-    void ShuffleBlocks(Pokemon& pokemon);
+    BlockA* getBlockAPreShuffle(Pokemon& pokemon);
 
-    void UnshuffleBlocks(Pokemon& pokemon);
+    BlockB* getBlockBPreShuffle(Pokemon& pokemon);
+
+    BlockC* getBlockCPreShuffle(Pokemon& pokemon);
+
+    BlockD* getBlockDPreShuffle(Pokemon& pokemon);
+
+    BlockA* getBlockAAfterShuffle(Pokemon& pokemon);
+
+    BlockB* getBlockBAfterShuffle(Pokemon& pokemon);
+
+    BlockC* getBlockCAfterShuffle(Pokemon& pokemon);
+
+    BlockD* getBlockDAfterShuffle(Pokemon& pokemon);
+
+    uint8_t getBlockOrder(Pokemon& pokemon);
+
+    void shuffleBlocks(Pokemon& pokemon);
+
+    void unshuffleBlocks(Pokemon& pokemon);
 
     void calculateChecksum(Pokemon& pokemon);
+
+    bool checkSequence(Pokemon& pokemon, uint8_t* seq, uint8_t seq_len, uint8_t offs);
 };
 
 
