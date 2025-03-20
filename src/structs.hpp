@@ -1,24 +1,25 @@
 #ifndef STRUCTS_H
 #define STRUCTS_H
 
+#include "items.hpp"
+#include "pokemon.hpp"
+
 #include <cstdint>
 #include <string>
 #include <array>
 
-// Define struct for each of the Pokémon Gen 4 blocks
 extern uint8_t blockAPositions[24];
 extern uint8_t blockBPositions[24];
 extern uint8_t blockCPositions[24];
 extern uint8_t blockDPositions[24];
 
-// Block A
 struct BlockA {
     uint16_t speciesID;
     uint16_t heldItem;
     uint16_t otID;
     uint16_t otSecretID;
     uint32_t experiencePoints;
-    uint8_t friendshipEggSteps;
+    uint8_t friendship; // used as egg steps when egg
     uint8_t ability;
     uint8_t markings;
     uint8_t languageOfOrigin;
@@ -37,7 +38,6 @@ struct BlockA {
     uint32_t sinnohRibbonsSet1;
 };
 
-// Block B
 struct BlockB {
     uint16_t moveset[4];
     uint8_t movePP[4];
@@ -51,25 +51,30 @@ struct BlockB {
     uint16_t platinumMetAtLocation;
 };
 
-// Block C
 struct BlockC {
     uint16_t nickname[11];
     uint8_t unused;
     uint8_t gameOfOrigin;
     uint32_t sinnohRibbonsSet2;
-    uint8_t unused2[4];
+    uint32_t unused2;
 };
 
-// Block D
+struct date {
+    uint8_t year;
+    uint8_t month;
+    uint8_t day;
+};
+
 struct BlockD {
     uint16_t otName[8];
-    uint8_t dateEggReceived[3];
-    uint8_t dateMet[3];
+    date dateEggReceived;
+    date metAtDate;
     uint16_t diamondPearlEggLocation;
     uint16_t diamondPearlMetAtLocation;
     uint8_t pokerus;
     uint8_t pokeBall;
-    uint8_t metAtLevelandGender;
+    uint8_t metAtLevel : 7;
+    uint8_t gender : 1;
     uint8_t encounterType;
     uint8_t hgssPokeBall;
     uint8_t performance;
@@ -79,8 +84,6 @@ struct Block {
     uint8_t dummyTemplate[0x20];
 };
 
-// Pokémon struct
-
 struct Pokemon {
     uint32_t pid;
     uint16_t badEggFlag;
@@ -88,8 +91,14 @@ struct Pokemon {
     Block block_data[4];
 };
 
+struct PokemonContainer {
+    bool isEncrypted = false;
+    bool isShuffled = false;
+    Pokemon pokemon;
+};
+
+#define MAX_LEVELS 100
 #define MAX_ITEMS 0x1D0 
 #define MAX_MOVES 0x1D3
-
 
 #endif // STRUCTS_H
