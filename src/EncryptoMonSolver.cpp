@@ -11,9 +11,8 @@ static inline int16_t calculateChecksumDifference(uint16_t currentChecksum, uint
     return static_cast<int16_t>(desiredChecksum) - static_cast<int16_t>(currentChecksum);
 }
 
-EncryptoMonSolver::EncryptoMonSolver(EncryptoMon& encryptoMon, TweakConfig& config):
-        m_encryptoMon(encryptoMon), 
-        m_config(config) 
+EncryptoMonSolver::EncryptoMonSolver(EncryptoMon& encryptoMon):
+        m_encryptoMon(encryptoMon)
 {
     m_encryptoMon.generateXORMasks();
     generateExperienceTables();
@@ -52,7 +51,7 @@ int EncryptoMonSolver::levelToExperience(int level, ExperienceGroup group) const
 }
 
 void EncryptoMonSolver::generateExperienceTables() {
-    for (int group = 0; group < NUM_EXPERIENCE_GROUPS; ++group) {
+    for (int group = 0; group < NumberOfExperienceGroups; ++group) {
         for (int level = 1; level <= 100; ++level) {
             int experience = levelToExperience(level, static_cast<ExperienceGroup>(group));
             m_experienceCurves[group][level - 1] = experience;
@@ -134,9 +133,8 @@ std::map<uint16_t, std::vector<Position4Byte>> EncryptoMonSolver::reduceSequence
     std::map<uint16_t, std::vector<Position4Byte>> results;
     for (uint32_t checksum = 0; checksum <= 0xFFFF; checksum++) {
         auto result = reduceSequences(pokemon, positions, checksum);
-        if (!result.empty()) {
+        if (!result.empty())
             results[checksum] = result;
-        }
     }
 
     return results;
@@ -148,14 +146,15 @@ std::map<uint16_t, std::vector<ChecksumContribution>> EncryptoMonSolver::precomp
 
     uint8_t gender = m_encryptoMon.getGender(pokemon);
     ExperienceGroup experienceGroup = getExperienceGroup(static_cast<PokemonName>(m_encryptoMon.getSpeciesID(pokemon)));
-    for (int year = 0; year <= 99; ++year) {
+    for (int year = 0; year <= 50; ++year) {
         for (int month = 1; month <= 12; ++month) {
             for (int day = 1; day <= 31; ++day) {
                 uint16_t dateChecksum = ((year << 8) | month) - ((0 << 8) | 1); // note this bitshifting would have to be reversed for dateeggreceived due to allignment
                 dateChecksum += ((day << 8) | 0) - ((1 << 8) | 0);
-                for (uint8_t metLevel = 1; metLevel <= 30; metLevel++) {
+                for (uint8_t metLevel = 7; metLevel <= 25; metLevel++) {
                     uint8_t metLevelChecksum = ((metLevel | gender << 7) << 0) - ((1 | gender << 7) << 0);
-                    for (int level = metLevel; level <= 40; ++level) {
+                    //for (int level = metLevel; level <= 100; ++level) {
+                        uint8_t level = metLevel;
                         uint32_t experiencePoints = levelToExperience(level, experienceGroup);
                         uint16_t experienceChecksum = (experiencePoints >> 16) + (experiencePoints & 0xFFFF) - 1;
 
@@ -164,7 +163,7 @@ std::map<uint16_t, std::vector<ChecksumContribution>> EncryptoMonSolver::precomp
                         date metDate = {static_cast<uint8_t>(year), static_cast<uint8_t>(month), static_cast<uint8_t>(day)};
                         ChecksumContribution contribution = {metDate, metLevel, experiencePoints};
                         checksumMap[totalChecksum].push_back(contribution);
-                    }
+                    //}
                 }
             }
         }
@@ -251,66 +250,37 @@ bool EncryptoMonSolver::solveForSequences(Pokemon& pokemon, const std::vector<Po
 }
 
 bool EncryptoMonSolver::solveForControllables(Pokemon& pokemon, const std::vector<Position4Byte>& positions) {
+    // disable except for chatot, debug testing
+
+    // m_encryptoMon.setMove(pokemon, static_cast<uint16_t>(MoveName::Fly), 0);
+    // m_encryptoMon.setMovePP(pokemon, 15, 0);
+        
+    // m_encryptoMon.setMove(pokemon, static_cast<uint16_t>(MoveName::Peck), 1);
+    // m_encryptoMon.setMovePP(pokemon, 35, 1);
+
+    // m_encryptoMon.setMove(pokemon, static_cast<uint16_t>(MoveName::Growl), 2);
+    // m_encryptoMon.setMovePP(pokemon, 40, 2);
+
+    // m_encryptoMon.setMove(pokemon, static_cast<uint16_t>(MoveName::MirrorMove), 1);
+    // m_encryptoMon.setMovePP(pokemon, 20, 1);
+
+    // m_encryptoMon.setMove(pokemon, static_cast<uint16_t>(MoveName::Fly), 0);
+    // m_encryptoMon.setMovePP(pokemon, 15, 0);
+
     m_checksumMap = precomputeChecksumContributions(pokemon);
 
     bool result = false;
     m_encryptoMon.setFriendship(pokemon, 255);
 
-    for (int item = 0; item < TM92; ++item) { 
-        m_encryptoMon.setHeldItem(pokemon, item);
-        if (solveForSequences(pokemon, positions))
-            result = true;
-    }
+    // for (int item = 0; item < TM92; ++item) { 
+    //     m_encryptoMon.setHeldItem(pokemon, item);
+    //     if (solveForSequences(pokemon, positions))
+    //         result = true;
+    // }
+
+    m_encryptoMon.setHeldItem(pokemon, TM83);
+    if (solveForSequences(pokemon, positions))
+        result = true;
 
     return result;
 }
-
-
-
-// bool EncryptoMonSolver::solveForSequences(Pokemon& pokemon, const std::vector<Position4Byte>& positions) {
-//     // std::set<int> hashes;
-
-//     int day = 1;
-//     int month = 1;
-
-//     m_encryptoMon.setFriendship(pokemon, 255);
-   
-//     for (int month = 1; month <= 12; month++) {
-//         for (int day = 1; day < 31; day++) {
-//             for (int year = 2000; year <= 2099 ; year++) {
-//                     m_encryptoMon.setMetDate(pokemon, day, month, year - 2000);
-//                     for (int level = 10; level < 26; level++) {
-//                         int experience = getExperienceForLevel(level, Slow);
-//                         m_encryptoMon.setExperience(pokemon, experience);
-//                         for (int metLevel = 10; metLevel < level; metLevel++) {
-//                             m_encryptoMon.setMetLevel(pokemon, metLevel);
-//                             //for (int checksum = 0; checksum < 0xFFFF; ++checksum) {
-//                                 for (int item = 0; item < TM92; ++item) {
-//                                     m_encryptoMon.setItem(pokemon, item);
-//                                     //uint16_t checksum = m_encryptoMon.calculateChecksum(pokemon);
-//                                     // int hash = checksum << 16 || item;
-//                                     // if (hashes.find(hash) != hashes.end())
-//                                     //     continue;
-//                                     m_encryptoMon.setChecksum(pokemon);
-//                                     // m_encryptoMon.encryptPokemon(pokemon);
-//                                     if (checkSequences(pokemon, positions))
-//                                         std::cout << "found a match with following data:\n" 
-//                                             << "\tlevel: " << level << "\n"
-//                                             << "\titem: " << item << "\n"
-//                                             << "\tmet level: " << metLevel << "\n"
-//                                             << "\tdate: " << day << "/" << month << "/" << year << "\n" 
-//                                             << std::endl;
-
-//                                     // m_encryptoMon.decryptPokemon(pokemon);
-//                                     //hashes.insert(hash);
-//                                 }
-//                             }
-//                         //}
-//                     // }
-//                 }
-//             }
-//         }
-//     }
-//     return false;
-// }
-

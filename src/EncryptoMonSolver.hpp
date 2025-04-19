@@ -2,7 +2,6 @@
 #define ENCRYPTOMONSOLVER_H
 
 #include "EncryptoMon.hpp"
-#include "config.hpp"
 #include <vector>
 #include <map>
 
@@ -127,7 +126,7 @@ struct ChecksumContribution {
 
 class EncryptoMonSolver {
 public:
-    EncryptoMonSolver(EncryptoMon& encryptoMon, TweakConfig& config);
+    EncryptoMonSolver(EncryptoMon& encryptoMon);
 
     bool checkSequences(Pokemon& pokemon, const std::vector<Position>& positions);
     bool checkSequences(Pokemon& pokemon, const std::vector<Position4Byte>& positions);
@@ -147,8 +146,7 @@ private:
     std::map<uint16_t, std::vector<ChecksumContribution>> precomputeChecksumContributions(Pokemon &pokemon);
 
     EncryptoMon& m_encryptoMon;
-    TweakConfig m_config;
-    int m_experienceCurves[NUM_EXPERIENCE_GROUPS][MAX_LEVELS];
+    int m_experienceCurves[NumberOfExperienceGroups][MAX_LEVELS];
     std::map<uint16_t, std::vector<ChecksumContribution>> m_checksumMap;
 };
 

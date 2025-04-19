@@ -1,8 +1,8 @@
-#ifndef STRUCTS_H
-#define STRUCTS_H
+#pragma once
 
 #include "items.hpp"
 #include "pokemon.hpp"
+#include "moves.hpp"
 
 #include <cstdint>
 #include <string>
@@ -12,6 +12,15 @@ extern uint8_t blockAPositions[24];
 extern uint8_t blockBPositions[24];
 extern uint8_t blockCPositions[24];
 extern uint8_t blockDPositions[24];
+
+enum BlockType {
+    TBlockHeader = 0,
+    TBlockA = 1,
+    TBlockB = 2,
+    TBlockC = 3,
+    TBlockD = 4,
+    TBlockInvalid = 5,
+};
 
 struct BlockA {
     uint16_t speciesID;
@@ -77,7 +86,7 @@ struct BlockD {
     uint8_t gender : 1;
     uint8_t encounterType;
     uint8_t hgssPokeBall;
-    uint8_t performance;
+    uint8_t performance; // 'walking mood'
 };
 
 struct Block {
@@ -91,14 +100,6 @@ struct Pokemon {
     Block block_data[4];
 };
 
-struct PokemonContainer {
-    bool isEncrypted = false;
-    bool isShuffled = false;
-    Pokemon pokemon;
-};
-
 #define MAX_LEVELS 100
 #define MAX_ITEMS 0x1D0 
 #define MAX_MOVES 0x1D3
-
-#endif // STRUCTS_H

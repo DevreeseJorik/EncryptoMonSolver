@@ -1,3 +1,5 @@
+#pragma once
+
 #include <string>
 #include <unordered_map>
 
@@ -470,7 +472,7 @@ enum Items {
     VsRecorder,
     GracideaFlower,
     SecretKey,
-    NUM_ITEMS
+    NumberOfItems,
 };
 
 inline std::string toString(Items item) {

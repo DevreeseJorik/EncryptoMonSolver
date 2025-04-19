@@ -1,3 +1,5 @@
+#pragma once
+
 #include <string>
 #include <unordered_map>
 
@@ -495,7 +497,8 @@ enum class PokemonName {
     Manaphy,
     Darkrai,
     Shaymin,
-    Arceus
+    Arceus,
+    NumberOfPokemon
 };
 
 inline std::string toString(PokemonName p) {
@@ -1011,12 +1014,12 @@ enum ExperienceGroup {
     MediumSlow,
     Fast,
     Slow,
-    NUM_EXPERIENCE_GROUPS
+    NumberOfExperienceGroups
 };
 
 inline ExperienceGroup getExperienceGroup(PokemonName p) {
     static const std::unordered_map<PokemonName, ExperienceGroup> pokemonToExperienceGroup = {
-        {PokemonName::None, ExperienceGroup::NUM_EXPERIENCE_GROUPS},
+        {PokemonName::None, ExperienceGroup::NumberOfExperienceGroups},
         {PokemonName::Bulbasaur, ExperienceGroup::MediumSlow },
         {PokemonName::Ivysaur, ExperienceGroup::MediumSlow },
         {PokemonName::Venusaur, ExperienceGroup::MediumSlow },
@@ -1516,6 +1519,6 @@ inline ExperienceGroup getExperienceGroup(PokemonName p) {
     if (it != pokemonToExperienceGroup.end()) {
         return it->second;
     } else {
-        return ExperienceGroup::NUM_EXPERIENCE_GROUPS;
+        return ExperienceGroup::NumberOfExperienceGroups;
     }
 }

@@ -4,7 +4,7 @@
 CXX = g++
 
 # Compiler flags
-CXXFLAGS = -std=c++17 -O2
+CXXFLAGS = -std=c++17 -O3
 
 # Target executable
 TARGET = output/encryptomon.exe
