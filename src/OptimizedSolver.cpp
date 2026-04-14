@@ -287,22 +287,26 @@ bool OptimizedSolver::isBlockAValid(Pokemon &pokemon, uint8_t &blockRelOffset, u
         if (totalEvs > getMaxEVs())
             return false;
 
-        if (
-            // perfectEvs >= m_bestResult.perfectEvs
-            //     || diffFromPerfect < m_bestResult.diffFromPerfect
-            diffFromPerfect < 10 && remainingSize == 1) {
-            m_bestResult.checksum = m_encryptoMon.getChecksum(pokemon);
-            m_bestResult.evs[0] = evs[0];
-            m_bestResult.evs[1] = evs[1];
-            m_bestResult.evs[2] = evs[2];
-            m_bestResult.evs[3] = evs[3];
-            m_bestResult.evs[4] = evs[4];
-            m_bestResult.evs[5] = evs[5];
-            m_bestResult.evCount = totalEvs;
-            m_bestResult.perfectEvs = perfectEvs;
-            m_bestResult.diffFromPerfect = diffFromPerfect;
-            std::memcpy(&m_bestResult.pokemon, &pokemon, sizeof(Pokemon));
-            printBestResult();
+        if (remainingSize == 1) {
+            if (
+                // perfectEvs >= m_bestResult.perfectEvs
+                //     || diffFromPerfect < m_bestResult.diffFromPerfect
+                diffFromPerfect < 10 && totalEvs < 300) {
+                m_bestResult.checksum = m_encryptoMon.getChecksum(pokemon);
+                m_bestResult.evs[0] = evs[0];
+                m_bestResult.evs[1] = evs[1];
+                m_bestResult.evs[2] = evs[2];
+                m_bestResult.evs[3] = evs[3];
+                m_bestResult.evs[4] = evs[4];
+                m_bestResult.evs[5] = evs[5];
+                m_bestResult.evCount = totalEvs;
+                m_bestResult.perfectEvs = perfectEvs;
+                m_bestResult.diffFromPerfect = diffFromPerfect;
+                std::memcpy(&m_bestResult.pokemon, &pokemon, sizeof(Pokemon));
+                printBestResult();
+            } else {
+                return false;
+            }
         }
 
         blockRelOffset++;
@@ -481,52 +485,19 @@ std::vector<uint16_t> OptimizedSolver::solveSequence(Pokemon &pokemon, const uin
         if (isDataValid(pokemonCopy, offset, size)) {
             checksums.push_back(checksum);
 
-            uint16_t currentChecksum = m_encryptoMon.calculateChecksum(pokemonCopy);
-            int16_t checksumDifference = calculateChecksumDifference(currentChecksum, checksum);
+            if (m_logging) {
+                uint16_t currentChecksum = m_encryptoMon.calculateChecksum(pokemonCopy);
+                int16_t checksumDifference = calculateChecksumDifference(currentChecksum, checksum);
 
-            if (checksumMap.find(checksumDifference) == checksumMap.end()) {
-                m_encryptoMon.setChecksum(pokemonCopy, checksum);
-                std::cout << "match for checksum " << std::hex << checksum << std::dec
-                          << " but could not auto-manipulate one\n"
-                          << std::endl;
-                std::cout << "Current checksum: " << std::hex << currentChecksum << std::dec << "\n"
-                          << "Checksum difference: " << std::hex << checksumDifference << std::dec << "\n"
-                          << std::endl;
-                std::cout << "Current Pokemon data:" << std::endl;
-
-                std::cout << std::hex;
-                for (int i = 0; i < sizeof(Pokemon); ++i) {
-                    if (i % 16 == 0)
-                        std::cout << std::endl;
-                    else if (i % 16 == 8)
-                        std::cout << " ";
-                    std::cout << std::hex << std::setfill('0') << std::setw(2)
-                              << static_cast<unsigned int>(reinterpret_cast<uint8_t *>(&pokemonCopy)[i]) << " ";
-                }
-                std::cout << std::dec << std::endl;
-            } else {
-
-                for (const auto &contribution : checksumMap[checksumDifference]) {
-                    m_encryptoMon.setChecksum(pokemonCopy, checksum);
-                    m_encryptoMon.setMetAtDate(pokemonCopy, contribution.metDate);
-                    m_encryptoMon.setMetAtLevel(pokemonCopy, contribution.metLevel);
-                    m_encryptoMon.setExperiencePoints(pokemonCopy, contribution.experiencePoints);
-                    m_encryptoMon.setHeldItem(pokemonCopy, static_cast<uint16_t>(contribution.heldItem));
-
-                    std::cout << "Found a match with the following data:\n"
-                              << "\tChecksum: " << std::hex << checksum << std::dec << "\n"
-                              << "\tName: "
-                              << toString(static_cast<PokemonName>(m_encryptoMon.getSpeciesID(pokemonCopy))) << "\n"
-                              << "\tLevel: " << static_cast<int>(contribution.currentLevel) << "\n"
-                              << "\tDate: " << static_cast<int>(contribution.metDate.day) << "/"
-                              << static_cast<int>(contribution.metDate.month) << "/"
-                              << static_cast<int>(contribution.metDate.year) << "\n"
-                              << "\tMet Level: " << static_cast<int>(m_encryptoMon.getMetAtLevel(pokemonCopy)) << "\n"
-                              << "\tHeld Item: " << toString(static_cast<Items>(m_encryptoMon.getHeldItem(pokemonCopy)))
-                              << "\n"
+                if (checksumMap.find(checksumDifference) == checksumMap.end()) {
+                    std::cout << "match for checksum " << std::hex << checksum << std::dec
+                              << " but could not auto-manipulate one\n"
                               << std::endl;
+                    std::cout << "Current checksum: " << std::hex << currentChecksum << std::dec << "\n"
+                              << "Checksum difference: " << std::hex << checksumDifference << std::dec << "\n"
+                              << std::endl;
+                    std::cout << "Current Pokemon data:" << std::endl;
 
-                    m_encryptoMon.encryptPokemon(pokemonCopy);
                     std::cout << std::hex;
                     for (int i = 0; i < sizeof(Pokemon); ++i) {
                         if (i % 16 == 0)
@@ -537,8 +508,41 @@ std::vector<uint16_t> OptimizedSolver::solveSequence(Pokemon &pokemon, const uin
                                   << static_cast<unsigned int>(reinterpret_cast<uint8_t *>(&pokemonCopy)[i]) << " ";
                     }
                     std::cout << std::dec << std::endl;
-                    std::cout << std::endl;
-                    m_encryptoMon.decryptPokemon(pokemonCopy);
+                } else {
+                    for (const auto &contribution : checksumMap[checksumDifference]) {
+                        m_encryptoMon.setMetAtDate(pokemonCopy, contribution.metDate);
+                        m_encryptoMon.setMetAtLevel(pokemonCopy, contribution.metLevel);
+                        m_encryptoMon.setExperiencePoints(pokemonCopy, contribution.experiencePoints);
+                        m_encryptoMon.setHeldItem(pokemonCopy, static_cast<uint16_t>(contribution.heldItem));
+
+                        std::cout << "Found a match with the following data:\n"
+                                  << "\tChecksum: " << std::hex << checksum << std::dec << "\n"
+                                  << "\tName: "
+                                  << toString(static_cast<PokemonName>(m_encryptoMon.getSpeciesID(pokemonCopy))) << "\n"
+                                  << "\tLevel: " << static_cast<int>(contribution.currentLevel) << "\n"
+                                  << "\tDate: " << static_cast<int>(contribution.metDate.day) << "/"
+                                  << static_cast<int>(contribution.metDate.month) << "/"
+                                  << static_cast<int>(contribution.metDate.year) << "\n"
+                                  << "\tMet Level: " << static_cast<int>(m_encryptoMon.getMetAtLevel(pokemonCopy))
+                                  << "\n"
+                                  << "\tHeld Item: "
+                                  << toString(static_cast<Items>(m_encryptoMon.getHeldItem(pokemonCopy))) << "\n"
+                                  << std::endl;
+
+                        m_encryptoMon.encryptPokemon(pokemonCopy);
+                        std::cout << std::hex;
+                        for (int i = 0; i < sizeof(Pokemon); ++i) {
+                            if (i % 16 == 0)
+                                std::cout << std::endl;
+                            else if (i % 16 == 8)
+                                std::cout << " ";
+                            std::cout << std::hex << std::setfill('0') << std::setw(2)
+                                      << static_cast<unsigned int>(reinterpret_cast<uint8_t *>(&pokemonCopy)[i]) << " ";
+                        }
+                        std::cout << std::dec << std::endl;
+                        std::cout << std::endl;
+                        m_encryptoMon.decryptPokemon(pokemonCopy);
+                    }
                 }
             }
         }
@@ -587,25 +591,4 @@ void OptimizedSolver::printBestResult() {
     std::cout << "EV count: " << m_bestResult.evCount << std::endl;
     std::cout << "Perfect EVs: " << static_cast<int>(m_bestResult.perfectEvs) << std::endl;
     std::cout << "Diff from perfect: " << m_bestResult.diffFromPerfect << std::endl;
-
-    m_encryptoMon.setChecksum(m_bestResult.pokemon, m_bestResult.checksum);
-    m_encryptoMon.decryptPokemon(m_bestResult.pokemon);
-
-    std::cout << "Data: ";
-    std::cout << std::hex;
-    for (int i = 0; i < sizeof(Pokemon); ++i) {
-        if (i % 16 == 0) {
-            std::cout << std::endl;
-            // std::cout << std::hex << std::setfill('0') << std::setw(2) << i << " ";
-        }
-        if (i % 16 == 8) {
-            std::cout << " ";
-        }
-        std::cout << std::hex << std::setfill('0') << std::setw(2)
-                  << static_cast<unsigned int>(reinterpret_cast<uint8_t *>(&m_bestResult.pokemon)[i]) << " ";
-    }
-    std::cout << std::dec << std::endl;
-    std::cout << std::endl;
-
-    m_encryptoMon.encryptPokemon(m_bestResult.pokemon);
 }
