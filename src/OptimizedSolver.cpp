@@ -425,8 +425,8 @@ std::map<uint16_t, std::vector<ChecksumContribution>> OptimizedSolver::computeCh
     for (int year = 0; year <= 50; ++year) {
         for (int month = 1; month <= 12; ++month) {
             for (int day = 1; day <= 31; ++day) {
-                uint16_t dateCS = (((year << 8) | month) - ((0 << 8) | 1));
-                dateCS += ((day << 8) | 0) - ((1 << 8) | 0);
+                uint16_t dateCS = (((day << 8) | month) - ((1 << 8) | 1));
+                dateCS += ((year << 8) | 0) - ((0 << 8) | 0);
                 for (uint8_t metLevel = 3; metLevel <= 30; metLevel++) {
                     uint8_t metLevelCS = ((metLevel | gender << 7) << 0) - ((1 | gender << 7) << 0);
                     uint32_t experiencePoints = levelToExperience(metLevel, experienceGroup);
