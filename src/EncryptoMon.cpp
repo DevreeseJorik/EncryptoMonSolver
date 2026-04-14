@@ -47,11 +47,15 @@ void EncryptoMon::processPokemon(Pokemon &pokemon) {
 
 void EncryptoMon::generateXORMasks() {
     for (uint32_t c = 0; c < 0xFFFF; c++) {
-        uint32_t s = c;
-        for (uint32_t i = 0; i < 0x40; i++) {
-            s = s * 0x41C64E6D + 0x6073;
-            xorMasks[c * 0x40 + i] = static_cast<uint16_t>(s >> 16);
-        }
+        generateXORMask(c, &xorMasks[c * 0x40], 0x40);
+    }
+}
+
+void EncryptoMon::generateXORMask(uint32_t seed, uint16_t *mask, uint32_t size) {
+    uint32_t s = seed;
+    for (uint32_t i = 0; i < size; i++) {
+        s = s * 0x41C64E6D + 0x6073;
+        mask[i] = static_cast<uint16_t>(s >> 16);
     }
 }
 
@@ -83,6 +87,32 @@ void EncryptoMon::decryptSection(Pokemon &pokemon, uint8_t offset, uint8_t size)
 }
 
 void EncryptoMon::decryptSection(Pokemon &pokemon, uint8_t offset) { encryptSection(pokemon, offset); }
+
+void EncryptoMon::encryptBattleData(ExtendedPokemon &extendedPokemon) {
+    uint16_t mask[sizeof(BattleData) / sizeof(uint16_t)];
+    generateXORMask(extendedPokemon.pokemon.pid, mask, sizeof(BattleData) / sizeof(uint16_t));
+
+    uint16_t *data = (uint16_t *)&extendedPokemon.battleData;
+    for (uint32_t i = 0; i < sizeof(BattleData) / sizeof(uint16_t); i++) {
+        data[i] ^= mask[i];
+    }
+}
+
+void EncryptoMon::decryptBattleData(ExtendedPokemon &extendedPokemon) { encryptBattleData(extendedPokemon); }
+
+void EncryptoMon::encryptBattleSection(ExtendedPokemon &extendedPokemon, uint8_t offset, uint8_t size) {
+    uint16_t mask[sizeof(BattleData) / sizeof(uint16_t)];
+    generateXORMask(extendedPokemon.pokemon.pid, mask, sizeof(BattleData) / sizeof(uint16_t));
+
+    uint16_t *data = (uint16_t *)&extendedPokemon.battleData;
+    for (uint32_t i = offset / sizeof(uint16_t); i < (offset + size) / sizeof(uint16_t); i++) {
+        data[i] ^= mask[i];
+    }
+}
+
+void EncryptoMon::decryptBattleSection(ExtendedPokemon &extendedPokemon, uint8_t offset, uint8_t size) {
+    encryptBattleSection(extendedPokemon, offset, size);
+}
 
 uint8_t *EncryptoMon::getBlockIds(Pokemon &pokemon) const {
     uint8_t order = getBlockOrder(pokemon);

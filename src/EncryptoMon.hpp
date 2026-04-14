@@ -143,6 +143,12 @@ class EncryptoMon {
     void setHGSSPokeBall(Pokemon &pokemon, uint8_t hgssPokeBall);
     uint8_t getPerformance(Pokemon &pokemon) const;
     void setPerformance(Pokemon &pokemon, uint8_t performance);
+
+    void generateXORMask(uint32_t pid, uint16_t *mask, uint32_t size);
+    void encryptBattleData(ExtendedPokemon &extendedPokemon);
+    void decryptBattleData(ExtendedPokemon &extendedPokemon);
+    void encryptBattleSection(ExtendedPokemon &extendedPokemon, uint8_t offset, uint8_t size);
+    void decryptBattleSection(ExtendedPokemon &extendedPokemon, uint8_t offset, uint8_t size);
 };
 
 #endif // ENCRYPTOMON_H

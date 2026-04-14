@@ -49,6 +49,7 @@ class OptimizedSolver {
     OptimizedSolver(EncryptoMon &encryptoMon);
 
     bool solve(Pokemon &pokemon, const uint8_t *data, size_t size, uint8_t offset);
+    bool solveBattleData(ExtendedPokemon &extendedPokemon, const uint8_t *data, size_t size, uint8_t offset);
 
     void setValidPokemon();
     void setValidPokemon(std::set<PokemonName> validPokemon);
@@ -81,6 +82,7 @@ class OptimizedSolver {
     bool isBlockDValid(Pokemon &pokemon, uint8_t &blockRelOffset, uint8_t remainingSize) const;
 
     bool isDataValid(Pokemon &pokemon, uint8_t offset, uint8_t size);
+    bool isBattleDataValid(ExtendedPokemon &extendedPokemon, uint8_t offset, uint8_t size);
 
     BlockType getBlockType(Pokemon &pokemon, uint8_t offset) const;
     uint8_t getBlockRelativeOffset(Pokemon &pokemon, uint8_t offset) const;

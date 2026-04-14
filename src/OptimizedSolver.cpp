@@ -417,6 +417,17 @@ bool OptimizedSolver::isDataValid(Pokemon &pokemon, uint8_t offset, uint8_t size
     return true;
 }
 
+bool OptimizedSolver::isBattleDataValid(ExtendedPokemon &extendedPokemon, uint8_t offset, uint8_t size) {
+    if (extendedPokemon.battleData.level < 1 || extendedPokemon.battleData.level > 100)
+        return false;
+
+    if (extendedPokemon.battleData.currentHP > extendedPokemon.battleData.maxHP)
+        return false;
+
+    // TODO: Add mail/seal validation
+    return true;
+}
+
 std::map<uint16_t, std::vector<ChecksumContribution>> OptimizedSolver::computeChecksumContributions(Pokemon &pokemon) {
     std::map<uint16_t, std::vector<ChecksumContribution>> checksumMap;
 
@@ -550,6 +561,20 @@ bool OptimizedSolver::solve(Pokemon &pokemon, const uint8_t *data, size_t size, 
     m_encryptoMon.setHeldItem(pokemon, static_cast<uint16_t>(Items::None));
 
     return solveSequence(pokemon, data, size, offset).empty();
+}
+
+bool OptimizedSolver::solveBattleData(ExtendedPokemon &extendedPokemon, const uint8_t *data, size_t size,
+                                      uint8_t offset) {
+    std::memcpy(reinterpret_cast<uint8_t *>(&extendedPokemon.battleData) + offset, data, size);
+
+    m_encryptoMon.decryptBattleSection(extendedPokemon, offset, size);
+
+    if (isBattleDataValid(extendedPokemon, offset, size)) {
+        m_encryptoMon.encryptBattleSection(extendedPokemon, offset, size);
+        return true;
+    }
+
+    return false;
 }
 
 void OptimizedSolver::printBestResult() {
