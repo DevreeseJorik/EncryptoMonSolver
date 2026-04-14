@@ -1,12 +1,12 @@
 #pragma once
 
 #include "items.hpp"
-#include "pokemon.hpp"
 #include "moves.hpp"
+#include "pokemon.hpp"
 
+#include <array>
 #include <cstdint>
 #include <string>
-#include <array>
 
 extern uint8_t blockAPositions[24];
 extern uint8_t blockBPositions[24];
@@ -100,6 +100,38 @@ struct Pokemon {
     Block block_data[4];
 };
 
+struct BattleData {
+    union {
+        struct {
+            uint8_t asleepRounds : 3;
+            uint8_t poisoned : 1;
+            uint8_t burned : 1;
+            uint8_t frozen : 1;
+            uint8_t paralyzed : 1;
+            uint8_t toxic : 1;
+        } statusFlags;
+        uint8_t statusByte;
+    };
+    uint8_t unknownFlags;
+    uint16_t unknown2;
+    uint8_t level;
+    uint8_t capsuleIndex;
+    uint16_t currentHP;
+    uint16_t maxHP;
+    uint16_t attack;
+    uint16_t defense;
+    uint16_t speed;
+    uint16_t spAttack;
+    uint16_t spDefense;
+    uint8_t mailData[0x38];
+    uint8_t sealCoordinates[0x18];
+};
+
+struct ExtendedPokemon {
+    Pokemon pokemon;
+    BattleData battleData;
+};
+
 #define MAX_LEVELS 100
-#define MAX_ITEMS 0x1D0 
+#define MAX_ITEMS 0x1D0
 #define MAX_MOVES 0x1D3
