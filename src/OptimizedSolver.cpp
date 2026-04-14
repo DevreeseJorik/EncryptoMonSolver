@@ -459,6 +459,11 @@ std::vector<uint16_t> OptimizedSolver::solveSequence(Pokemon &pokemon, const uin
     std::map<uint16_t, std::vector<ChecksumContribution>> checksumMap = computeChecksumContributions(pokemonCopy);
 
     for (int checksum = 0; checksum <= 0xFFFF; ++checksum) {
+        m_encryptoMon.setMetAtDate(pokemonCopy, 1, 1, 2000 - 2000);
+        m_encryptoMon.setExperiencePoints(pokemonCopy, 1);
+        m_encryptoMon.setMetAtLevel(pokemonCopy, 1);
+        m_encryptoMon.setHeldItem(pokemonCopy, static_cast<uint16_t>(Items::None));
+
         m_encryptoMon.setChecksum(pokemonCopy, static_cast<uint16_t>(checksum));
         m_encryptoMon.decryptSection(pokemonCopy, offset - 0x8, size);
 
