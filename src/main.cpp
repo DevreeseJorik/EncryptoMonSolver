@@ -1,6 +1,7 @@
 #include "OptimizedSolver.hpp"
 #include <cstring>
 #include <fstream>
+#include <iomanip>
 #include <iostream>
 #include <vector>
 
@@ -9,67 +10,50 @@
 int main() {
     EncryptoMon encryptoMon;
     OptimizedSolver solver(encryptoMon);
-    Pokemon pokemon;
+    ExtendedPokemon extendedPokemon;
 
-    // jump start EVs: 228B3F6: 0xF94A2
-    // calculator input 1: 2384898
-    // calculator input 2: 23848C4: 0xF94CE
-    // calculator output: 0xF94FA
-    // dot artist live: 0xF91A2 - 0xF91A2 + 0x78
+    // generate random numbers to test with
+    std::vector<uint16_t> jumps = {};
+    for (uint16_t i = 0; i < 0xFFFF; ++i) {
+        jumps.push_back(i);
+    }
+    uint8_t offset = 0;
+    for (int i = 0; i < 3; ++i) {
+        offset = offsetof(ExtendedPokemon, battleData) + offsetof(BattleData, mailData) + offsetof(Mail, msg) +
+                 i * sizeof(MailMessage) + offsetof(MailMessage, inputField);
 
-    const uint32_t boxDataStartOffset = 0xC318;
-    const uint32_t pokeStartOffset = 0x19B50;
-    // const uint32_t boxDataId = (pokeStartOffset - boxDataStartOffset) / 0x88;
-    const uint32_t pokemonDataOffset = 0x18; // offset inside pokemon data block
+        std::cout << "Testing battle data jumps for offset 0x" << std::hex << (int)offset << std::dec << std::endl;
 
-    const uint8_t cmdSize = 0x6;
-    const int dotArtistEntries = 0x78;
-    uint32_t dotArtistOffsets[] = {0x138A, 0x138A + 0x10F594};
-    const uint16_t jumps[] = {0x16, 0x1A};
-    const int entries = dotArtistEntries * ARRAY_SIZE(dotArtistOffsets) * ARRAY_SIZE(jumps);
-    uint8_t data[entries][cmdSize] = {};
+        for (auto &file : {// R"(abra.pkm)", R"(chatot.pkm)", R"(haunter.pkm)", R"(magikarp.pkm)",
+                           R"(chatot_extended.bin)"}) {
+            if (encryptoMon.loadBinaryExtendedPokemon(file, extendedPokemon)) {
+                std::cout << "Loaded Extended Pokemon data from " << file << std::endl;
 
-    int idx = 0;
-    for (int i = 0; i < ARRAY_SIZE(dotArtistOffsets); ++i) {
-        auto dotArtistOffset = dotArtistOffsets[i];
-        for (uint32_t offset = 0; offset < dotArtistEntries; offset++) {
-            const uint32_t totalOffset = dotArtistOffset + offset - (pokeStartOffset + pokemonDataOffset + cmdSize);
-            for (int j = 0; j < ARRAY_SIZE(jumps); ++j) {
-                const uint8_t jump = jumps[j];
-                const uint8_t dataEntry[cmdSize] = {static_cast<uint8_t>(jump & 0xFF),
-                                                    static_cast<uint8_t>((jump >> 8) & 0xFF),
-                                                    static_cast<uint8_t>(totalOffset & 0xFF),
-                                                    static_cast<uint8_t>((totalOffset >> 8) & 0xFF),
-                                                    static_cast<uint8_t>((totalOffset >> 16) & 0xFF),
-                                                    static_cast<uint8_t>((totalOffset >> 24) & 0xFF)};
-                std::memcpy(data[idx], dataEntry, cmdSize);
-                ++idx;
+                for (auto &jump : jumps) {
+                    // std::cout << "Testing jump: 0x" << std::hex << jump << std::dec << std::endl;
+                    if (solver.solveBattleData(extendedPokemon, reinterpret_cast<const uint8_t *>(&jump), sizeof(jump),
+                                               offset)) {
+                        std::cout << "Successfully solved battle data for jump: 0x" << std::hex << jump << std::dec
+                                  << std::endl;
+
+                        // For demonstration, let's encrypt the battle data again and print it out
+                        encryptoMon.encryptBattleData(extendedPokemon);
+                        std::cout << "Encrypted battle data at offset 0x" << std::hex << (int)offset << ": ";
+                        for (size_t i = 0; i < sizeof(BattleData); ++i) {
+                            if (i % 16 == 0)
+                                std::cout << std::endl;
+                            else if (i % 16 == 8)
+                                std::cout << " ";
+                            std::cout << std::hex << std::setfill('0') << std::setw(2)
+                                      << static_cast<unsigned int>(
+                                             reinterpret_cast<uint8_t *>(&extendedPokemon.battleData)[i])
+                                      << " ";
+                        }
+                        std::cout << std::endl;
+                        // }
+                    }
+                }
             }
         }
     }
-
-    {
-        std::ofstream out("dot_artist_data.bin", std::ios::binary);
-        out.write(reinterpret_cast<const char *>(data), sizeof(data));
-        out.close();
-        std::cout << "Wrote " << sizeof(data) << " bytes to dot_artist_data.bin" << std::endl;
-    }
-
-    std::vector<std::string> pokemonFiles = {
-        R"(abra.pkm)",
-        // R"(chatot.pkm)",
-        // R"(haunter.pkm)",
-        // R"(magikarp.pkm)",
-    };
-
-    for (const auto &file : pokemonFiles) {
-        if (encryptoMon.loadBinaryPokemon(file, pokemon)) {
-            std::cout << "Loaded Pokemon data from " << file << std::endl;
-            encryptoMon.shuffleBlocks(pokemon);
-            for (int i = 0; i < entries; ++i)
-                solver.solve(pokemon, data[i], cmdSize, pokemonDataOffset);
-        }
-    }
-
-    return 1;
 }

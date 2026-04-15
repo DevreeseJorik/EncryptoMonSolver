@@ -82,6 +82,7 @@ class OptimizedSolver {
     bool isBlockDValid(Pokemon &pokemon, uint8_t &blockRelOffset, uint8_t remainingSize) const;
 
     bool isDataValid(Pokemon &pokemon, uint8_t offset, uint8_t size);
+    bool isBattleBlockValid(BattleData &battleData, uint8_t offset, uint8_t remainingSize) const;
     bool isBattleDataValid(ExtendedPokemon &extendedPokemon, uint8_t offset, uint8_t size);
 
     BlockType getBlockType(Pokemon &pokemon, uint8_t offset) const;

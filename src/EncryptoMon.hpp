@@ -10,6 +10,7 @@ const int XOR_MASK_SIZE = 0x40;
 class EncryptoMon {
   public:
     bool loadBinaryPokemon(const std::string &filePath, Pokemon &pokemon);
+    bool loadBinaryExtendedPokemon(const std::string &filePath, ExtendedPokemon &extendedPokemon);
     bool dumpBinaryPokemon(const std::string &filePath, Pokemon &pokemon);
     void preparePokemon(Pokemon &pokemon);
     void processPokemon(Pokemon &pokemon);

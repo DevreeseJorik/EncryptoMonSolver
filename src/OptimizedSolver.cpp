@@ -421,14 +421,87 @@ bool OptimizedSolver::isDataValid(Pokemon &pokemon, uint8_t offset, uint8_t size
     return true;
 }
 
+bool OptimizedSolver::isBattleBlockValid(BattleData &battleData, uint8_t offset, uint8_t remainingSize) const {
+    if (offset >= offsetof(BattleData, mailData) && offset < offsetof(BattleData, sealCoordinates)) {
+        if (offset < offsetof(BattleData, mailData) + offsetof(Mail, msg))
+            return false;
+
+        auto inMsgArrayOffset = (offset - (offsetof(BattleData, mailData) + offsetof(Mail, msg)));
+        auto msgIndex = inMsgArrayOffset / sizeof(MailMessage);
+        auto inMsgOffset = inMsgArrayOffset % sizeof(MailMessage);
+
+        if (inMsgOffset < offsetof(MailMessage, sentenceGroup)) {
+            if (battleData.mailData.msg[msgIndex].sentenceGroup > 0x4)
+                return false;
+            offset = offsetof(BattleData, mailData) + offsetof(Mail, msg) + msgIndex * sizeof(MailMessage) +
+                     offsetof(MailMessage, sentenceGroup);
+            return true;
+        }
+
+        if (inMsgOffset < offsetof(MailMessage, inputField)) {
+            if (battleData.mailData.msg[msgIndex].sentenceIndex > 0x13)
+                return false;
+
+            offset = offsetof(BattleData, mailData) + offsetof(Mail, msg) + msgIndex * sizeof(MailMessage) +
+                     offsetof(MailMessage, sentenceIndex);
+            return true;
+        }
+
+        if (inMsgOffset < sizeof(MailMessage)) {
+            // 0-0x1F0: Pokemon/2 (0x1F0 is BAD EGG, not selectable)
+            // 0x1F1-0x3C3: Move/2
+            // 0x3C3-0x3D5: Type (not selectable in mail)
+            // 0x3D6-0x451: Status (ability)
+            // 0x452-0x477: Trainer
+            // 0x478-0x49D: People (~4 non-selectable!)
+            // 0x49E-0x508: Greetings (~9 non-selectable!)
+            // 0x509-0x570: Lifestyle
+            // 0x571-0x59F: Feelings
+            // 0x5A0-0x5AB: ? (not selectable in mail)
+            // 0x5AC: TOUGH WORDS
+            // 0x5AD-0x5BF: ? (not selectable in mail)
+            // 0x5C0-0x5D6
+            // null-byte: 0xFFFF
+
+            // first, take the value of the specific matching inputfield to inmsgoffset:
+            uint16_t inputFieldIndex = (inMsgOffset < offsetof(MailMessage, inputField) + sizeof(uint16_t)) ? 0 : 1;
+            auto inputValue = battleData.mailData.msg[msgIndex].inputField[inputFieldIndex];
+
+            if (inputValue >= 0x3C3 && inputValue <= 0x3D5)
+                return false;
+
+            if (inputValue >= 0x5A0 && inputValue <= 0x5AB)
+                return false;
+
+            if (inputValue >= 0x5AD && inputValue <= 0x5BF)
+                return false;
+
+            if (inputValue > 0x5D6 && inputValue != 0xFFFF)
+                return false;
+
+            offset = offsetof(BattleData, mailData) + offsetof(Mail, msg) + msgIndex * sizeof(MailMessage) +
+                     offsetof(MailMessage, inputField) + inputFieldIndex * sizeof(uint16_t);
+            return true;
+        }
+    }
+
+    return true;
+}
+
 bool OptimizedSolver::isBattleDataValid(ExtendedPokemon &extendedPokemon, uint8_t offset, uint8_t size) {
-    if (extendedPokemon.battleData.level < 1 || extendedPokemon.battleData.level > 100)
-        return false;
+    offset = offset - offsetof(ExtendedPokemon, battleData);
+    uint8_t currentOffset = offset;
+    uint8_t remainingSize = offset + size - currentOffset;
 
-    if (extendedPokemon.battleData.currentHP > extendedPokemon.battleData.maxHP)
-        return false;
+    while (currentOffset < offset + size) {
+        remainingSize = offset + size - currentOffset;
 
-    // TODO: Add mail/seal validation
+        if (!isBattleBlockValid(extendedPokemon.battleData, currentOffset, remainingSize))
+            return false;
+
+        currentOffset++;
+    }
+
     return true;
 }
 
@@ -569,16 +642,13 @@ bool OptimizedSolver::solve(Pokemon &pokemon, const uint8_t *data, size_t size, 
 
 bool OptimizedSolver::solveBattleData(ExtendedPokemon &extendedPokemon, const uint8_t *data, size_t size,
                                       uint8_t offset) {
-    std::memcpy(reinterpret_cast<uint8_t *>(&extendedPokemon.battleData) + offset, data, size);
+    std::memcpy(reinterpret_cast<uint8_t *>(&extendedPokemon) + offset, data, size);
 
     m_encryptoMon.decryptBattleSection(extendedPokemon, offset, size);
+    bool success = isBattleDataValid(extendedPokemon, offset, size);
+    m_encryptoMon.encryptBattleSection(extendedPokemon, offset, size);
 
-    if (isBattleDataValid(extendedPokemon, offset, size)) {
-        m_encryptoMon.encryptBattleSection(extendedPokemon, offset, size);
-        return true;
-    }
-
-    return false;
+    return success;
 }
 
 void OptimizedSolver::printBestResult() {

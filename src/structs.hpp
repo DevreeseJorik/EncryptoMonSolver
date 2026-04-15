@@ -100,6 +100,26 @@ struct Pokemon {
     Block block_data[4];
 };
 
+struct MailPokeIcon {
+    uint16_t data; // TODO: figure out format
+};
+
+struct MailMessage {
+    uint16_t sentenceGroup;
+    uint16_t sentenceIndex;
+    uint16_t inputField[2];
+};
+struct Mail {
+    uint32_t tidsid;
+    uint8_t sex;
+    uint8_t gameRegion;
+    uint8_t gameVersion;
+    uint8_t mailType;
+    uint16_t name[8];
+    MailPokeIcon pokeIcon[4];
+    MailMessage msg[3];
+};
+
 struct BattleData {
     union {
         struct {
@@ -123,7 +143,7 @@ struct BattleData {
     uint16_t speed;
     uint16_t spAttack;
     uint16_t spDefense;
-    uint8_t mailData[0x38];
+    Mail mailData;
     uint8_t sealCoordinates[0x18];
 };
 

@@ -16,6 +16,18 @@ bool EncryptoMon::loadBinaryPokemon(const std::string &filePath, Pokemon &pokemo
     return true;
 }
 
+bool EncryptoMon::loadBinaryExtendedPokemon(const std::string &filePath, ExtendedPokemon &extendedPokemon) {
+    std::ifstream file(filePath, std::ios::binary);
+    if (!file.is_open()) {
+        std::cerr << "Error opening file: " << filePath << std::endl;
+        return false;
+    }
+
+    file.read(reinterpret_cast<char *>(&extendedPokemon), sizeof(ExtendedPokemon));
+    file.close();
+    return true;
+}
+
 bool EncryptoMon::dumpBinaryPokemon(const std::string &filePath, Pokemon &pokemon) {
     std::ofstream file(filePath, std::ios::binary);
     if (!file.is_open()) {
