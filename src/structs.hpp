@@ -120,6 +120,16 @@ struct Mail {
     MailMessage msg[3];
 };
 
+struct Seal {
+    uint8_t id;
+    uint8_t x;
+    uint8_t y;
+};
+
+struct BallCapsule {
+    Seal seals[0x8];
+};
+
 struct BattleData {
     union {
         struct {
@@ -144,7 +154,7 @@ struct BattleData {
     uint16_t spAttack;
     uint16_t spDefense;
     Mail mailData;
-    uint8_t sealCoordinates[0x18];
+    BallCapsule ballCapsule;
 };
 
 struct ExtendedPokemon {

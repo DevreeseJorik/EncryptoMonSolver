@@ -362,6 +362,43 @@ bool OptimizedSolver::isBlockBValid(Pokemon &pokemon, uint8_t &blockRelOffset, u
 }
 
 bool OptimizedSolver::isBlockDValid(Pokemon &pokemon, uint8_t &blockRelOffset, uint8_t remainingSize) const {
+    if (blockRelOffset >= offsetof(BlockD, dateEggReceived) &&
+        blockRelOffset < offsetof(BlockD, dateEggReceived) + sizeof(date)) {
+        date eggDate = m_encryptoMon.getDateEggReceived(pokemon);
+        auto inEggDateOffset = blockRelOffset - offsetof(BlockD, dateEggReceived);
+
+        if (inEggDateOffset == offsetof(date, year)) {
+            if (eggDate.year > 99)
+                return false;
+        } else if (inEggDateOffset == offsetof(date, month)) {
+            if (eggDate.month == 0 || eggDate.month > 12)
+                return false;
+        } else if (inEggDateOffset == offsetof(date, day)) {
+            if (eggDate.day == 0 || eggDate.day > 31) // technically should be max days in month
+                return false;
+        }
+        blockRelOffset++;
+        return true;
+    }
+
+    if (blockRelOffset >= offsetof(BlockD, metAtDate) && blockRelOffset < offsetof(BlockD, metAtDate) + sizeof(date)) {
+        date metDate = m_encryptoMon.getMetAtDate(pokemon);
+        auto inmetDateOffset = blockRelOffset - offsetof(BlockD, metAtDate);
+
+        if (inmetDateOffset == offsetof(date, year)) {
+            if (metDate.year > 99)
+                return false;
+        } else if (inmetDateOffset == offsetof(date, month)) {
+            if (metDate.month == 0 || metDate.month > 12)
+                return false;
+        } else if (inmetDateOffset == offsetof(date, day)) {
+            if (metDate.day == 0 || metDate.day > 31) // technically should be max days in month
+                return false;
+        }
+        blockRelOffset++;
+        return true;
+    }
+
     if (blockRelOffset == 0x1E) {
         if (m_encryptoMon.getHGSSPokeBall(pokemon) != 0x0)
             return false;
@@ -422,23 +459,45 @@ bool OptimizedSolver::isDataValid(Pokemon &pokemon, uint8_t offset, uint8_t size
 }
 
 bool OptimizedSolver::isBattleBlockValid(BattleData &battleData, uint8_t offset, uint8_t remainingSize) const {
-    if (offset >= offsetof(BattleData, mailData) && offset < offsetof(BattleData, sealCoordinates)) {
-        if (offset < offsetof(BattleData, mailData) + offsetof(Mail, msg))
+    if (offset >= offsetof(BattleData, mailData) && offset < offsetof(BattleData, ballCapsule)) {
+        if (offset < offsetof(BattleData, mailData) + offsetof(Mail, name))
             return false;
+
+        if (offset < offsetof(BattleData, mailData) + offsetof(Mail, pokeIcon)) {
+            auto inNameOffset = (offset - (offsetof(BattleData, mailData) + offsetof(Mail, name)));
+            uint16_t nameChar = battleData.mailData.name[inNameOffset / sizeof(uint16_t)];
+            const uint16_t maxValidChar = 0x1F0;
+            if (inNameOffset % sizeof(uint16_t) == 1) {
+                offset++;
+                return true;
+            }
+
+            if (nameChar > maxValidChar && nameChar != 0xFFFF)
+                return false;
+
+            offset = offsetof(BattleData, mailData) + offsetof(Mail, name) +
+                     (inNameOffset / sizeof(uint16_t)) * sizeof(uint16_t);
+            return true;
+        }
+
+        if (offset < offsetof(BattleData, mailData) + offsetof(Mail, msg))
+            return false; // not figured out yet
 
         auto inMsgArrayOffset = (offset - (offsetof(BattleData, mailData) + offsetof(Mail, msg)));
         auto msgIndex = inMsgArrayOffset / sizeof(MailMessage);
         auto inMsgOffset = inMsgArrayOffset % sizeof(MailMessage);
 
-        if (inMsgOffset < offsetof(MailMessage, sentenceGroup)) {
+        if (inMsgOffset < offsetof(MailMessage, sentenceIndex)) {
             if (battleData.mailData.msg[msgIndex].sentenceGroup > 0x4)
                 return false;
+
             offset = offsetof(BattleData, mailData) + offsetof(Mail, msg) + msgIndex * sizeof(MailMessage) +
                      offsetof(MailMessage, sentenceGroup);
             return true;
         }
 
         if (inMsgOffset < offsetof(MailMessage, inputField)) {
+
             if (battleData.mailData.msg[msgIndex].sentenceIndex > 0x13)
                 return false;
 
@@ -485,7 +544,72 @@ bool OptimizedSolver::isBattleBlockValid(BattleData &battleData, uint8_t offset,
         }
     }
 
-    return true;
+    if (offset >= offsetof(BattleData, ballCapsule)) {
+        auto inBallCapsuleOffset = offset - offsetof(BattleData, ballCapsule);
+        auto sealIndex = inBallCapsuleOffset / sizeof(Seal);
+        auto inSealOffset = inBallCapsuleOffset % sizeof(Seal);
+
+        if (sealIndex >= 0x8)
+            return false;
+
+        if (inSealOffset == offsetof(Seal, id)) {
+            uint8_t sealId = battleData.ballCapsule.seals[sealIndex].id;
+            if (sealId > 0x4C)
+                return false;
+            offset = offsetof(BattleData, ballCapsule) + sealIndex * sizeof(Seal) + offsetof(Seal, id);
+            return true;
+        }
+
+        // for x and y, these values must be within a circular area.
+        // the center of this area is (0xBE, 0x46), radius is 0x3C, diameter is 0x78
+        // formula for checking if point is within circle: (x - centerX)^2 + (y - centerY)^2 <= radius^2
+
+        // if we're at x and the remaining size is more than 1, validate with y value to check if it would be possible
+        // to be valid, and increment the offset by 2 to skip both x and y if we're at x and the remaining size is 0,
+        // validate with y = 0x46 (center of circle) to check if it would be possible to be valid, and increment the
+        // offset by 1 to skip x if we're at y, we can always validate with x = 0xBE (center of circle), and increment
+        // the offset by 1 to skip y. Since we would never have to validate y unless we ONLY care about y, as going
+        // through x first would make the offset skip both x and y if both are valid, we can be sure that if we're
+        // validating y, x is either valid or we're only validating y, so we can just validate y with x as the center of
+        // the circle.
+        const auto centerX = 0xBE;
+        const auto centerY = 0x46;
+        const auto radius = 0x3C;
+
+        if (inSealOffset == offsetof(Seal, x)) {
+            int x = static_cast<int>(battleData.ballCapsule.seals[sealIndex].x);
+            int y = static_cast<int>(battleData.ballCapsule.seals[sealIndex].y);
+
+            auto dx = x - centerX;
+            auto dy = y - centerY;
+
+            if (remainingSize > 1) {
+                if (dx * dx + dy * dy > radius * radius)
+                    return false;
+
+                offset += 2;
+                return true;
+            }
+
+            if (dx * dx > radius * radius)
+                return false;
+
+            offset += 1;
+            return true;
+        }
+
+        if (inSealOffset == offsetof(Seal, y)) {
+            int y = static_cast<int>(battleData.ballCapsule.seals[sealIndex].y);
+            auto dy = y - centerY;
+            if (dy * dy > radius * radius)
+                return false;
+
+            offset += 1;
+            return true;
+        }
+    }
+
+    return false;
 }
 
 bool OptimizedSolver::isBattleDataValid(ExtendedPokemon &extendedPokemon, uint8_t offset, uint8_t size) {
@@ -510,29 +634,31 @@ std::map<uint16_t, std::vector<ChecksumContribution>> OptimizedSolver::computeCh
 
     uint8_t gender = m_encryptoMon.getGender(pokemon);
     ExperienceGroup experienceGroup = getExperienceGroup(static_cast<PokemonName>(m_encryptoMon.getSpeciesID(pokemon)));
-    for (int year = 0; year <= 50; ++year) {
-        for (int month = 1; month <= 12; ++month) {
-            for (int day = 1; day <= 31; ++day) {
-                uint16_t dateCS = (((day << 8) | month) - ((1 << 8) | 1));
-                dateCS += ((year << 8) | 0) - ((0 << 8) | 0);
-                for (uint8_t metLevel = 3; metLevel <= 30; metLevel++) {
-                    uint8_t metLevelCS = ((metLevel | gender << 7) << 0) - ((1 | gender << 7) << 0);
-                    uint32_t experiencePoints = levelToExperience(metLevel, experienceGroup);
-                    uint16_t experienceCS = (experiencePoints >> 16) + (experiencePoints & 0xFFFF) - 1;
-                    for (uint16_t item = 0; item < static_cast<uint16_t>(Items::NumberOfItems); ++item) {
-                        uint16_t heldItemCS = item;
-                        uint16_t totalCS = dateCS + experienceCS + metLevelCS + heldItemCS;
+    // for (int year = 0; year <= 50; ++year) {
+    //     for (int month = 1; month <= 12; ++month) {
+    //         for (int day = 1; day <= 31; ++day) {
+    // uint16_t dateCS = (((day << 8) | month) - ((1 << 8) | 1));
+    // dateCS += ((year << 8) | 0) - ((0 << 8) | 0);
+    uint16_t dateCS = 0;
+    for (uint8_t metLevel = 3; metLevel <= 30; metLevel++) {
+        uint8_t metLevelCS = ((metLevel | gender << 7) << 0) - ((1 | gender << 7) << 0);
+        uint32_t experiencePoints = levelToExperience(metLevel, experienceGroup);
+        uint16_t experienceCS = (experiencePoints >> 16) + (experiencePoints & 0xFFFF) - 1;
+        for (uint16_t item = 0; item < static_cast<uint16_t>(Items::NumberOfItems); ++item) {
+            uint16_t heldItemCS = item;
+            uint16_t totalCS = dateCS + experienceCS + metLevelCS + heldItemCS;
 
-                        date metDate = {static_cast<uint8_t>(year), static_cast<uint8_t>(month),
-                                        static_cast<uint8_t>(day)};
-                        ChecksumContribution contribution = {metDate, metLevel, metLevel, experiencePoints,
-                                                             static_cast<Items>(heldItemCS)};
-                        checksumMap[totalCS].push_back(contribution);
-                    }
-                }
-            }
+            // date metDate = {static_cast<uint8_t>(year), static_cast<uint8_t>(month),
+            //                 static_cast<uint8_t>(day)};
+            date metDate = {0, 1, 1};
+            ChecksumContribution contribution = {metDate, metLevel, metLevel, experiencePoints,
+                                                 static_cast<Items>(heldItemCS)};
+            checksumMap[totalCS].push_back(contribution);
         }
     }
+    //         }
+    //     }
+    // }
 
     return checksumMap;
 }
@@ -543,11 +669,11 @@ std::vector<uint16_t> OptimizedSolver::solveSequence(Pokemon &pokemon, const uin
 
     Pokemon pokemonCopy = pokemon;
     std::memcpy(reinterpret_cast<uint8_t *>(&pokemonCopy) + offset, data, size);
-    std::cout << "Calculating checksum contributions, this may take a while...\n" << std::endl;
+    // std::cout << "Calculating checksum contributions, this may take a while...\n" << std::endl;
     std::map<uint16_t, std::vector<ChecksumContribution>> checksumMap = computeChecksumContributions(pokemonCopy);
 
     for (int checksum = 0; checksum <= 0xFFFF; ++checksum) {
-        m_encryptoMon.setMetAtDate(pokemonCopy, 1, 1, 2000 - 2000);
+        // m_encryptoMon.setMetAtDate(pokemonCopy, 1, 1, 2000 - 2000);
         m_encryptoMon.setExperiencePoints(pokemonCopy, 1);
         m_encryptoMon.setMetAtLevel(pokemonCopy, 1);
         m_encryptoMon.setHeldItem(pokemonCopy, static_cast<uint16_t>(Items::None));
@@ -583,7 +709,7 @@ std::vector<uint16_t> OptimizedSolver::solveSequence(Pokemon &pokemon, const uin
                     std::cout << std::dec << std::endl;
                 } else {
                     for (const auto &contribution : checksumMap[checksumDifference]) {
-                        m_encryptoMon.setMetAtDate(pokemonCopy, contribution.metDate);
+                        // m_encryptoMon.setMetAtDate(pokemonCopy, contribution.metDate);
                         m_encryptoMon.setMetAtLevel(pokemonCopy, contribution.metLevel);
                         m_encryptoMon.setExperiencePoints(pokemonCopy, contribution.experiencePoints);
                         m_encryptoMon.setHeldItem(pokemonCopy, static_cast<uint16_t>(contribution.heldItem));
@@ -592,10 +718,11 @@ std::vector<uint16_t> OptimizedSolver::solveSequence(Pokemon &pokemon, const uin
                                   << "\tChecksum: " << std::hex << checksum << std::dec << "\n"
                                   << "\tName: "
                                   << toString(static_cast<PokemonName>(m_encryptoMon.getSpeciesID(pokemonCopy))) << "\n"
-                                  << "\tLevel: " << static_cast<int>(contribution.currentLevel) << "\n"
-                                  << "\tDate: " << static_cast<int>(contribution.metDate.day) << "/"
-                                  << static_cast<int>(contribution.metDate.month) << "/"
-                                  << static_cast<int>(contribution.metDate.year) << "\n"
+                                  << "\tLevel: " << static_cast<int>(contribution.currentLevel)
+                                  << "\n"
+                                  //   << "\tDate: " << static_cast<int>(contribution.metDate.day) << "/"
+                                  //   << static_cast<int>(contribution.metDate.month) << "/"
+                                  //   << static_cast<int>(contribution.metDate.year) << "\n"
                                   << "\tMet Level: " << static_cast<int>(m_encryptoMon.getMetAtLevel(pokemonCopy))
                                   << "\n"
                                   << "\tHeld Item: "
@@ -634,7 +761,7 @@ bool OptimizedSolver::solve(Pokemon &pokemon, const uint8_t *data, size_t size, 
     m_encryptoMon.setFriendship(pokemon, 255);
     m_encryptoMon.setMetAtDate(pokemon, 1, 1, 2000 - 2000);
     m_encryptoMon.setExperiencePoints(pokemon, 1);
-    m_encryptoMon.setMetAtLevel(pokemon, 1);
+    // m_encryptoMon.setMetAtLevel(pokemon, 1);
     m_encryptoMon.setHeldItem(pokemon, static_cast<uint16_t>(Items::None));
 
     return solveSequence(pokemon, data, size, offset).empty();
@@ -643,11 +770,9 @@ bool OptimizedSolver::solve(Pokemon &pokemon, const uint8_t *data, size_t size, 
 bool OptimizedSolver::solveBattleData(ExtendedPokemon &extendedPokemon, const uint8_t *data, size_t size,
                                       uint8_t offset) {
     std::memcpy(reinterpret_cast<uint8_t *>(&extendedPokemon) + offset, data, size);
-
-    m_encryptoMon.decryptBattleSection(extendedPokemon, offset, size);
+    m_encryptoMon.decryptBattleData(extendedPokemon);
     bool success = isBattleDataValid(extendedPokemon, offset, size);
-    m_encryptoMon.encryptBattleSection(extendedPokemon, offset, size);
-
+    m_encryptoMon.encryptBattleData(extendedPokemon);
     return success;
 }
 
