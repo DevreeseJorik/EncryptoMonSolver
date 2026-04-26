@@ -1,4 +1,5 @@
 #include "EncryptoMon.hpp"
+#include <cstring>
 #include <fstream>
 #include <iostream>
 
@@ -23,7 +24,22 @@ bool EncryptoMon::loadBinaryExtendedPokemon(const std::string &filePath, Extende
         return false;
     }
 
-    file.read(reinterpret_cast<char *>(&extendedPokemon), sizeof(ExtendedPokemon));
+    file.seekg(0, std::ios::end);
+    std::streampos fileSize = file.tellg();
+    file.seekg(0, std::ios::beg);
+
+    if (fileSize == sizeof(ExtendedPokemon)) {
+        file.read(reinterpret_cast<char *>(&extendedPokemon), sizeof(ExtendedPokemon));
+    } else if (fileSize == sizeof(Pokemon)) {
+        Pokemon tempPokemon;
+        file.read(reinterpret_cast<char *>(&tempPokemon), sizeof(Pokemon));
+        extendedPokemon.pokemon = tempPokemon;
+        memset(&extendedPokemon.battleData, 0, sizeof(BattleData));
+    } else {
+        file.close();
+        return false;
+    }
+
     file.close();
     return true;
 }
@@ -117,7 +133,8 @@ void EncryptoMon::encryptBattleSection(ExtendedPokemon &extendedPokemon, uint8_t
     generateXORMask(extendedPokemon.pokemon.pid, mask, sizeof(BattleData) / sizeof(uint16_t));
 
     uint16_t *data = (uint16_t *)&extendedPokemon.battleData;
-    for (uint32_t i = offset / sizeof(uint16_t); i < (offset + size) / sizeof(uint16_t); i++) {
+    uint8_t relativeOffset = offset - offsetof(ExtendedPokemon, battleData);
+    for (uint32_t i = relativeOffset / sizeof(uint16_t); i < (relativeOffset + size) / sizeof(uint16_t); i++) {
         data[i] ^= mask[i];
     }
 }
