@@ -195,8 +195,9 @@ void EncryptoMon::shuffleBlocks(Pokemon &pokemon) {
     for (int i = 0; i < 4; ++i)
         temp[i] = pokemon.block_data[i];
 
+    // Canonical block i goes to physical position blockIds[i]
     for (int i = 0; i < 4; ++i)
-        pokemon.block_data[i] = temp[blockIds[i]];
+        pokemon.block_data[blockIds[i]] = temp[i];
 
     delete[] blockIds;
 }
@@ -204,9 +205,10 @@ void EncryptoMon::shuffleBlocks(Pokemon &pokemon) {
 void EncryptoMon::unshuffleBlocks(Pokemon &pokemon) {
     uint8_t *blockIds = getBlockIds(pokemon);
 
+    // Canonical block i comes from physical position blockIds[i]
     Block temp[4];
     for (int i = 0; i < 4; ++i)
-        temp[blockIds[i]] = pokemon.block_data[i];
+        temp[i] = pokemon.block_data[blockIds[i]];
 
     for (int i = 0; i < 4; ++i)
         pokemon.block_data[i] = temp[i];
