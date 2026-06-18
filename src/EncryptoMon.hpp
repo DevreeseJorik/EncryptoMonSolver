@@ -38,7 +38,6 @@ class EncryptoMon {
     void setChecksum(Pokemon &pokemon, uint16_t checksum);
     uint16_t getChecksum(Pokemon &pokemon) const;
 
-    // Block A
     uint16_t getSpeciesID(Pokemon &pokemon) const;
     void setSpeciesID(Pokemon &pokemon, uint16_t speciesID);
     uint16_t getHeldItem(Pokemon &pokemon) const;
@@ -84,7 +83,6 @@ class EncryptoMon {
     uint32_t getSinnohRibbonsSet1(Pokemon &pokemon) const;
     void setSinnohRibbonsSet1(Pokemon &pokemon, uint32_t sinnohRibbonsSet1);
 
-    // Block B
     void getMoveset(Pokemon &pokemon, uint16_t moveset[4]) const;
     void setMoveset(Pokemon &pokemon, const uint16_t moveset[4]);
     void setMove(Pokemon &pokemon, uint16_t move, size_t index);
@@ -106,7 +104,6 @@ class EncryptoMon {
     uint16_t getPlatinumMetAtLocation(Pokemon &pokemon) const;
     void setPlatinumMetAtLocation(Pokemon &pokemon, uint16_t platinumMetAtLocation);
 
-    // Block C
     void getNickname(Pokemon &pokemon, uint16_t nickname[11]) const;
     void setNickname(Pokemon &pokemon, const uint16_t nickname[11]);
     uint8_t getUnused(Pokemon &pokemon) const;
@@ -118,7 +115,6 @@ class EncryptoMon {
     uint32_t getUnused2(Pokemon &pokemon) const;
     void setUnused2(Pokemon &pokemon, uint32_t unused2);
 
-    // Block D
     void getOTName(Pokemon &pokemon, uint16_t otName[8]) const;
     void setOTName(Pokemon &pokemon, const uint16_t otName[8]);
     date getDateEggReceived(Pokemon &pokemon) const;
@@ -144,6 +140,9 @@ class EncryptoMon {
     void setHGSSPokeBall(Pokemon &pokemon, uint8_t hgssPokeBall);
     uint8_t getPerformance(Pokemon &pokemon) const;
     void setPerformance(Pokemon &pokemon, uint8_t performance);
+
+    bool isNicknameValid(Pokemon &pokemon, uint16_t minCharID, uint16_t maxCharID) const;
+    bool isOTNameValid(Pokemon &pokemon, uint16_t minCharID, uint16_t maxCharID) const;
 
     void generateXORMask(uint32_t pid, uint16_t *mask, uint32_t size);
     void encryptBattleData(ExtendedPokemon &extendedPokemon);

@@ -736,3 +736,27 @@ void EncryptoMon::setPerformance(Pokemon &pokemon, uint8_t performance) {
     BlockD *blockD = getBlockDPreShuffle(pokemon);
     blockD->performance = performance;
 }
+
+bool EncryptoMon::isNicknameValid(Pokemon &pokemon, uint16_t minCharID, uint16_t maxCharID) const {
+    uint16_t nickname[11];
+    getNickname(pokemon, nickname);
+    for (int i = 0; i < 11; i++) {
+        if (nickname[i] == 0xFFFF)
+            break;
+        if (nickname[i] < minCharID || nickname[i] > maxCharID)
+            return false;
+    }
+    return true;
+}
+
+bool EncryptoMon::isOTNameValid(Pokemon &pokemon, uint16_t minCharID, uint16_t maxCharID) const {
+    uint16_t otName[8];
+    getOTName(pokemon, otName);
+    for (int i = 0; i < 8; i++) {
+        if (otName[i] == 0xFFFF)
+            break;
+        if (otName[i] < minCharID || otName[i] > maxCharID)
+            return false;
+    }
+    return true;
+}
