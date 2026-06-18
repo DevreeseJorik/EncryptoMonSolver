@@ -162,6 +162,24 @@ struct ExtendedPokemon {
     BattleData battleData;
 };
 
+static_assert(sizeof(BlockA) == 32, "BlockA must be 32 bytes");
+static_assert(sizeof(BlockB) == 32, "BlockB must be 32 bytes");
+static_assert(sizeof(BlockC) == 32, "BlockC must be 32 bytes");
+static_assert(sizeof(BlockD) == 32, "BlockD must be 32 bytes");
+static_assert(sizeof(Block)  == 32, "Block must be 32 bytes");
+static_assert(sizeof(Pokemon) == 136, "Pokemon must be 136 bytes");
+
+// Box storage (no extended party data — 136 bytes per slot)
+struct Box {
+    Pokemon pokemon[30];
+};
+
+struct BoxData {
+    uint32_t currentBoxID;
+    Box      boxes[18];
+    // TODO: add box name and background data structs
+};
+
 #define MAX_LEVELS 100
 #define MAX_ITEMS 0x1D0
 #define MAX_MOVES 0x1D3
