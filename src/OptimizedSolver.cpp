@@ -97,8 +97,8 @@ void OptimizedSolver::setValidMoves(Pokemon &pokemon) {
 }
 
 BlockType OptimizedSolver::getBlockType(Pokemon &pokemon, uint8_t offset) const {
-    const uint8_t headerSize = 0x8;
-    const uint8_t blockSize = 0x20;
+    constexpr uint8_t headerSize = offsetof(Pokemon, block_data);
+    constexpr uint8_t blockSize  = sizeof(Block);
     if (offset < headerSize)
         return TBlockHeader;
 
@@ -123,8 +123,8 @@ BlockType OptimizedSolver::getBlockType(Pokemon &pokemon, uint8_t offset) const 
 }
 
 uint8_t OptimizedSolver::getBlockRelativeOffset(Pokemon &pokemon, uint8_t offset) const {
-    const uint8_t headerSize = 0x8;
-    const uint8_t blockSize = 0x20;
+    constexpr uint8_t headerSize = offsetof(Pokemon, block_data);
+    constexpr uint8_t blockSize  = sizeof(Block);
     if (offset < headerSize)
         return offset;
 
@@ -134,38 +134,40 @@ uint8_t OptimizedSolver::getBlockRelativeOffset(Pokemon &pokemon, uint8_t offset
 uint8_t OptimizedSolver::getBlockOffset(Pokemon &pokemon, BlockType blockType) const {
     uint8_t order = m_encryptoMon.getBlockOrder(pokemon);
 
+    constexpr uint8_t headerSize = offsetof(Pokemon, block_data);
+    constexpr uint8_t blockSize  = sizeof(Block);
+
     switch (blockType) {
     case TBlockHeader:
         return 0;
     case TBlockA:
-        return 0x8 + blockAPositions[order] * 0x20;
+        return headerSize + blockAPositions[order] * blockSize;
     case TBlockB:
-        return 0x8 + blockBPositions[order] * 0x20;
+        return headerSize + blockBPositions[order] * blockSize;
     case TBlockC:
-        return 0x8 + blockCPositions[order] * 0x20;
+        return headerSize + blockCPositions[order] * blockSize;
     case TBlockD:
-        return 0x8 + blockDPositions[order] * 0x20;
+        return headerSize + blockDPositions[order] * blockSize;
     default:
-        return 0; // Invalid type
+        return 0;
     }
 }
 
 bool OptimizedSolver::isBlockHeaderValid(Pokemon &pokemon, uint8_t &blockRelOffset, uint8_t remainingSize) const {
-    if (blockRelOffset < 0x4) { // PID: assume always valid
-        blockRelOffset = 4;
+    if (blockRelOffset < offsetof(Pokemon, badEggFlag)) {
+        blockRelOffset = offsetof(Pokemon, badEggFlag);
         return true;
     }
 
-    if (blockRelOffset < 0x6) {
+    if (blockRelOffset < offsetof(Pokemon, checksum)) {
         if (pokemon.badEggFlag)
             return false;
-
-        blockRelOffset = 6;
+        blockRelOffset = offsetof(Pokemon, checksum);
         return true;
     }
 
-    if (blockRelOffset < 0x8) {
-        blockRelOffset = 8;
+    if (blockRelOffset < offsetof(Pokemon, block_data)) {
+        blockRelOffset = offsetof(Pokemon, block_data);
         return true;
     }
 
@@ -679,7 +681,7 @@ std::vector<uint16_t> OptimizedSolver::solveSequence(Pokemon &pokemon, const uin
         m_encryptoMon.setHeldItem(pokemonCopy, static_cast<uint16_t>(Items::None));
 
         m_encryptoMon.setChecksum(pokemonCopy, static_cast<uint16_t>(checksum));
-        m_encryptoMon.decryptSection(pokemonCopy, offset - 0x8, size);
+        m_encryptoMon.decryptSection(pokemonCopy, offset - offsetof(Pokemon, block_data), size);
 
         if (isDataValid(pokemonCopy, offset, size)) {
             checksums.push_back(checksum);
@@ -747,7 +749,7 @@ std::vector<uint16_t> OptimizedSolver::solveSequence(Pokemon &pokemon, const uin
             }
         }
 
-        m_encryptoMon.encryptSection(pokemonCopy, offset - 0x8, size);
+        m_encryptoMon.encryptSection(pokemonCopy, offset - offsetof(Pokemon, block_data), size);
     }
 
     return checksums;
