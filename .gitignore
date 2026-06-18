@@ -2,3 +2,9 @@
 
 /output
 /.vs
+/backup
+/converters
+/build
+/trademon
+
+settings.json
