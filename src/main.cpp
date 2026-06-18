@@ -1,59 +1,50 @@
-#include "OptimizedSolver.hpp"
-#include <cstring>
-#include <fstream>
+#include "SaveCorruptionSolver.hpp"
+
+#include <algorithm>
+#include <filesystem>
 #include <iomanip>
 #include <iostream>
 #include <vector>
 
-#define ARRAY_SIZE(arr) (sizeof(arr) / sizeof((arr)[0]))
-
 int main() {
-    EncryptoMon encryptoMon;
-    OptimizedSolver solver(encryptoMon);
-    ExtendedPokemon extendedPokemon;
+    EncryptoMon em;
 
-    // generate random numbers to test with
-    std::vector<uint16_t> jumps = {};
-    for (uint16_t i = 0; i < 0xFFFF; ++i) {
-        jumps.push_back(i);
+    SaveCorruptionSolver::Config cfg;
+    cfg.nickname = {0x0001, 0x01B5};
+    cfg.otName = {0x0001, 0x01B5};
+
+    SaveCorruptionSolver solver(em, cfg);
+
+    auto collisions = solver.findValidCollisions();
+    std::cout << "Valid collision entries in BoxData: " << collisions.size() << "\n";
+    for (const auto &c : collisions) {
+        uint32_t box = c.pokemonIndex / 30;
+        uint32_t slot = c.pokemonIndex % 30;
+        std::cout << "  [" << std::setw(3) << c.pokemonIndex << "] "
+                  << "box " << box << " slot " << slot << "  overwrite " << static_cast<int>(c.overwriteLen)
+                  << " bytes\n";
     }
-    uint8_t offset = 0;
-    for (int i = 0; i < 3; ++i) {
-        offset = offsetof(ExtendedPokemon, battleData) + offsetof(BattleData, mailData) + offsetof(Mail, msg) +
-                 i * sizeof(MailMessage) + offsetof(MailMessage, inputField);
+    std::cout << "\n";
 
-        std::cout << "Testing battle data jumps for offset 0x" << std::hex << (int)offset << std::dec << std::endl;
-
-        for (auto &file : {// R"(abra.pkm)", R"(chatot.pkm)", R"(haunter.pkm)", R"(magikarp.pkm)",
-                           R"(chatot_extended.bin)"}) {
-            if (encryptoMon.loadBinaryExtendedPokemon(file, extendedPokemon)) {
-                std::cout << "Loaded Extended Pokemon data from " << file << std::endl;
-
-                for (auto &jump : jumps) {
-                    // std::cout << "Testing jump: 0x" << std::hex << jump << std::dec << std::endl;
-                    if (solver.solveBattleData(extendedPokemon, reinterpret_cast<const uint8_t *>(&jump), sizeof(jump),
-                                               offset)) {
-                        std::cout << "Successfully solved battle data for jump: 0x" << std::hex << jump << std::dec
-                                  << std::endl;
-
-                        // For demonstration, let's encrypt the battle data again and print it out
-                        encryptoMon.encryptBattleData(extendedPokemon);
-                        std::cout << "Encrypted battle data at offset 0x" << std::hex << (int)offset << ": ";
-                        for (size_t i = 0; i < sizeof(BattleData); ++i) {
-                            if (i % 16 == 0)
-                                std::cout << std::endl;
-                            else if (i % 16 == 8)
-                                std::cout << " ";
-                            std::cout << std::hex << std::setfill('0') << std::setw(2)
-                                      << static_cast<unsigned int>(
-                                             reinterpret_cast<uint8_t *>(&extendedPokemon.battleData)[i])
-                                      << " ";
-                        }
-                        std::cout << std::endl;
-                        // }
-                    }
-                }
-            }
-        }
+    // Files are expected to be 136-byte box-format (encrypted + shuffled) pokemon.
+    std::vector<std::string> pokemonFiles;
+    const std::filesystem::path startersDir = "starters";
+    if (!std::filesystem::is_directory(startersDir)) {
+        std::cerr << "starters/ directory not found (run from project root)\n";
+        return 1;
     }
+    for (const auto &entry : std::filesystem::directory_iterator(startersDir)) {
+        if (entry.is_regular_file() && entry.path().extension() == ".bin")
+            pokemonFiles.push_back(entry.path().string());
+    }
+    std::sort(pokemonFiles.begin(), pokemonFiles.end());
+
+    std::cout << "Loaded " << pokemonFiles.size() << " starter file(s):\n";
+    for (const auto &f : pokemonFiles)
+        std::cout << "  " << f << "\n";
+    std::cout << "\n";
+
+    solver.solve(pokemonFiles, SaveCorruptionSolver::makeBlockAPos2Enumerator());
+
+    return 0;
 }

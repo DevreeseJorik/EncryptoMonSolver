@@ -1,0 +1,121 @@
+#pragma once
+
+#include "EncryptoMon.hpp"
+#include <cstdint>
+#include <functional>
+#include <string>
+#include <vector>
+
+// 0xFFFF is always accepted as the string terminator.
+struct CharRangeConfig {
+    uint16_t minCharID = 0x0001;
+    uint16_t maxCharID = 0x01B5;
+};
+
+// The flash write stopped at the 256-byte page boundary that falls
+// within the first THIRD_BLOCK_OFFSET bytes of this pokemon slot,
+// so 'overwriteLen' bytes at the slot start come from new data and
+// the rest come from the base slot.
+struct CollisionEntry {
+    uint32_t pokemonIndex; // linear 0-based index across all 18*30 slots
+    uint8_t  overwriteLen; // bytes from slot start overwritten (always < 72)
+};
+
+struct TweakFields {
+    bool nickname = true;
+    bool otName   = true;
+    bool metDate  = true;
+    // Disabled until (TID, SID) is validated against reachable RNG seeds.
+    bool tidSid   = false;
+};
+
+struct SaveCorruptionConfig {
+    CharRangeConfig nickname;
+    CharRangeConfig otName;
+    uint16_t targetChecksum = 0xED5A;
+    Pokemon basePokemon = {};
+    TweakFields tweakFields;
+};
+
+struct ChimeraSolution {
+    uint32_t pid;
+    uint8_t  blockOrder;
+    uint8_t  overwriteLen;
+    uint32_t pokemonIndex;
+    Pokemon  source;   // modified source in save-file format (shuffled + encrypted)
+    Pokemon  chimera;
+};
+
+struct Gen4Frame {
+    uint32_t pid;
+    uint16_t iv1; // hp|(atk<<5)|(def<<10)
+    uint16_t iv2; // spe|(spa<<5)|(spd<<10)
+};
+
+class SaveCorruptionSolver {
+  public:
+    using Config = SaveCorruptionConfig;
+
+    // A FrameEnumerator is called repeatedly: it fills 'frame' and returns true,
+    // or returns false when the sequence is exhausted.
+    using FrameEnumerator = std::function<bool(Gen4Frame &frame)>;
+
+    // Layout constants derived from struct sizes.
+    // Verified by static_asserts in SaveCorruptionSolver.cpp.
+    static constexpr uint32_t FLASH_PAGE_SIZE    = 256;
+    static constexpr uint32_t BOX_HEADER_BYTES   = 4;   // sizeof(BoxData::currentBoxID)
+    static constexpr uint8_t  POKEMON_BYTES      = 136; // sizeof(Pokemon)
+    static constexpr uint8_t  HEADER_BYTES       = 8;   // offsetof(Pokemon, block_data)
+    static constexpr uint8_t  BLOCK_BYTES        = 32;  // sizeof(Block)
+    static constexpr uint8_t  TOTAL_BLOCK_WORDS  = 64;  // block_data / sizeof(uint16_t)
+    // Third block starts here; valid collisions only overwrite bytes [0, THIRD_BLOCK_OFFSET)
+    static constexpr uint8_t  THIRD_BLOCK_OFFSET = HEADER_BYTES + 2 * BLOCK_BYTES; // 72
+
+    SaveCorruptionSolver(EncryptoMon &em, Config cfg = {});
+
+    // Find every slot in BoxData whose 256-byte page boundary lands
+    // within the first THIRD_BLOCK_OFFSET bytes of that slot.
+    std::vector<CollisionEntry> findValidCollisions() const;
+
+    // For each frame yielded by nextFrame, try every (pokemon file × collision entry)
+    // pair and print any valid chimeras found.
+    void solve(const std::vector<std::string> &pokemonFiles, FrameEnumerator nextFrame);
+
+    // Returns a FrameEnumerator that scans all 32-bit LCRNG seeds via Method 1,
+    // yielding only frames where blockA is at shuffled position 2 (~18.75% pass rate).
+    // Each frame carries the PID and the two IV words from the following RNG calls.
+    static FrameEnumerator makeBlockAPos2Enumerator();
+
+    // Build a chimera for a source pokemon (unshuffled + decrypted canonical form),
+    // a collision entry, and a Gen4 Method 1 frame (pid + iv1 + iv2).
+    // Applies the frame IVs to the source before shuffling.
+    // Returns false if the PID's block order does not place blockA at position 2,
+    // or if OW headroom is insufficient.
+    bool buildChimera(Pokemon source, const CollisionEntry &entry, const Gen4Frame &frame,
+                      ChimeraSolution &out) const;
+
+    // TODO: filter results by minimum IV thresholds
+    // TODO: multithreaded search over all 32-bit seeds
+    // TODO: after finding chimera, verify the game would accept the pokemon (bad-egg flag etc.)
+    // TODO: add box name and background data structs to BoxData and account for them in collision math
+
+  private:
+    EncryptoMon &m_em;
+    Config       m_cfg;
+
+    // Base Pokemon in save-file format (canonical → shuffled → encrypted).
+    Pokemon  m_baseEncrypted;
+    // Prefix sums of (base_encrypted[i] XOR mask[targetCS][i]) — what each word
+    // of the non-OW region decrypts to when the chimera is read with targetCS.
+    uint32_t m_baseDecryptedSum[TOTAL_BLOCK_WORDS + 1];
+
+    void printSolution(const std::string &srcFile, const ChimeraSolution &sol) const;
+
+    // Satisfies sum constraints for both the source Pokemon and the chimera
+    // using the fields enabled in cfg.tweakFields. Returns false if either
+    // region cannot reach its target sum with the available headroom.
+    bool satisfyChimeraChecksums(Pokemon &shuffled, uint8_t k) const;
+
+    // Map canonical word index [0..63] to its shuffled word index for a given block order.
+    static uint8_t canonicalToShuffled(uint8_t canonWord, uint8_t order);
+};
