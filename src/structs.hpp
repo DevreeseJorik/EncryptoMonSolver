@@ -166,7 +166,7 @@ static_assert(sizeof(BlockA) == 32, "BlockA must be 32 bytes");
 static_assert(sizeof(BlockB) == 32, "BlockB must be 32 bytes");
 static_assert(sizeof(BlockC) == 32, "BlockC must be 32 bytes");
 static_assert(sizeof(BlockD) == 32, "BlockD must be 32 bytes");
-static_assert(sizeof(Block)  == 32, "Block must be 32 bytes");
+static_assert(sizeof(Block) == 32, "Block must be 32 bytes");
 static_assert(sizeof(Pokemon) == 136, "Pokemon must be 136 bytes");
 
 // Box storage (no extended party data — 136 bytes per slot)
@@ -174,11 +174,39 @@ struct Box {
     Pokemon pokemon[30];
 };
 
+struct BoxName {
+    uint16_t name[9];
+    uint16_t padding[11];
+};
+
+struct BoxBackground {
+    uint8_t backgroundID;
+};
+
 struct BoxData {
     uint32_t currentBoxID;
-    Box      boxes[18];
-    // TODO: add box name and background data structs
+    Box boxes[18];
+    BoxName boxNames[18];
+    BoxBackground boxBackgrounds[18];
+    uint8_t boxFlags;
+    uint8_t padding;
 };
+static_assert(sizeof(BoxData) == 74184, "BoxData must be 74184 bytes");
+struct StorageBlockFooter {
+    uint32_t saveCountMajor;
+    uint32_t saveCountMinor;
+    uint32_t blockSize;
+    uint32_t magic;    // 0x20060623 JP/Intl, 0x20070903 KO
+    uint16_t blockID;  // 0x0001 for storage block
+    uint16_t checksum; // CRC16-CCITT of all bytes before this footer
+};
+static_assert(sizeof(StorageBlockFooter) == 0x14, "StorageBlockFooter must be 0x14 bytes");
+struct BoxDataSave {
+    BoxData data;
+    uint8_t reserved[4];
+    StorageBlockFooter footer;
+};
+static_assert(sizeof(BoxDataSave) == 0x121E0, "BoxDataSave must be 0x121E0 bytes");
 
 #define MAX_LEVELS 100
 #define MAX_ITEMS 0x1D0
