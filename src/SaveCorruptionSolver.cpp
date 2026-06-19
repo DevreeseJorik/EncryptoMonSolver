@@ -562,7 +562,9 @@ void SaveCorruptionSolver::printSolution(const std::string &srcFile, const Chime
 
     std::cout << "=== Chimera solution ===\n"
               << "  Source:       " << srcFile << "\n"
-              << "  Slot:         box " << box << ", slot " << slot << " (index " << sol.pokemonIndex << ")\n"
+              << "  Slot:         box " << box << ", slot " << slot << " (row " << row << ", col " << col << ", index "
+              << sol.pokemonIndex << ")\n"
+              << "  Box open:     " << sol.boxID << " (0-indexed)\n"
               << "  Overwrite:    " << static_cast<int>(sol.overwriteLen) << " bytes\n"
               << "  PID:          0x" << std::hex << std::setw(8) << std::setfill('0') << sol.pid << std::dec << "\n"
               << "  Block order:  " << static_cast<int>(sol.blockOrder) << "\n"
