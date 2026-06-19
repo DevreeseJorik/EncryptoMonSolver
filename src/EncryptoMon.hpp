@@ -141,8 +141,8 @@ class EncryptoMon {
     uint8_t getPerformance(Pokemon &pokemon) const;
     void setPerformance(Pokemon &pokemon, uint8_t performance);
 
-    bool isNicknameValid(Pokemon &pokemon, uint16_t minCharID, uint16_t maxCharID) const;
-    bool isOTNameValid(Pokemon &pokemon, uint16_t minCharID, uint16_t maxCharID) const;
+    bool isNicknameValid(Pokemon &pokemon, uint16_t minCharID, uint16_t maxCharID, uint8_t maxLen = 10) const;
+    bool isOTNameValid(Pokemon &pokemon, uint16_t minCharID, uint16_t maxCharID, uint8_t maxLen = 7) const;
 
     void generateXORMask(uint32_t pid, uint16_t *mask, uint32_t size);
     void encryptBattleData(ExtendedPokemon &extendedPokemon);
