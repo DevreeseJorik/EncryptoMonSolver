@@ -76,7 +76,7 @@ int main() {
         std::cout << "  " << f << "\n";
     std::cout << "\n";
 
-    solver.solve(pokemonFiles, SaveCorruptionSolver::makeBlockAPos2Enumerator());
+    solver.solveParallel(pokemonFiles, boxDataSave, boxDataSave.footer.checksum);
 
     return 0;
 }

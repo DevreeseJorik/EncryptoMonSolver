@@ -3,7 +3,9 @@
 #include "EncryptoMon.hpp"
 #include <cstdint>
 #include <functional>
+#include <mutex>
 #include <string>
+#include <thread>
 #include <vector>
 
 enum class Game { DP, Platinum, HGSS };
@@ -38,6 +40,7 @@ struct TweakFields {
     bool nickname = true;
     bool otName = true;
     bool metDate = true;
+    bool currentBoxID = true; // try all box IDs 0-17 when sweeping for a CRC match
     // Disabled until (TID, SID) is validated against reachable RNG seeds.
     bool tidSid = false;
 };
@@ -56,7 +59,8 @@ struct ChimeraSolution {
     uint8_t blockOrder;
     uint8_t overwriteLen;
     uint32_t pokemonIndex;
-    Pokemon source; // modified source in save-file format (shuffled + encrypted)
+    uint32_t boxID = 0; // currentBoxID value that makes the box CRC match
+    Pokemon source;     // modified source in save-file format (shuffled + encrypted)
     Pokemon chimera;
 };
 
@@ -92,33 +96,50 @@ class SaveCorruptionSolver {
     std::vector<CollisionEntry> findValidCollisions() const;
 
     // For each frame yielded by nextFrame, try every (pokemon file × collision entry)
-    // pair and print any valid chimeras found.
-    void solve(const std::vector<std::string> &pokemonFiles, FrameEnumerator nextFrame);
+    // pair. For each chimera candidate, sweep char pairs in the non-OW region to find
+    // a value split that also makes the BoxDataSave CRC match targetBoxCRC.
+    // boxData must be the empty BoxDataSave whose footer.checksum == targetBoxCRC.
+    void solve(const std::vector<std::string> &pokemonFiles, FrameEnumerator nextFrame, BoxDataSave &boxData,
+               uint16_t targetBoxCRC);
 
     // CRC16-CCITT as used by Gen 4 save blocks (init=0xFFFF).
     // NOT the same as the per-pokemon checksum (which is a simple 16-bit word sum).
     // For DP storage block: cover all bytes except the last 0x14 (footer); result
     // goes at footer+0x12 (little-endian u16, i.e. 2 bytes before end of footer).
+    struct CRCState {
+        uint8_t top = 0xFF;
+        uint8_t bot = 0xFF;
+    };
+    static CRCState crc16CCITTUpdate(CRCState state, const uint8_t *data, size_t length);
+    static uint16_t crc16CCITTFinalize(CRCState state);
     static uint16_t crc16CCITT(const uint8_t *data, size_t length);
 
-    // Build a zero-initialised BoxData (all 18×30 slots are encrypted empty pokemon,
+    // Build a zero-initialised BoxDataSave (all 18×30 slots are encrypted empty pokemon,
     // i.e. zero bytes, since pid=0 makes the XOR stream all-zero).
     // boxNames and boxBackgrounds are memcpy'd from boxMiscPath
     // (layout: BoxName[18] then BoxBackground[18], 738 bytes total).
     // Returns false and writes nothing on I/O error or wrong file size.
     static bool buildBoxData(EncryptoMon &em, uint32_t currentBoxID, const std::string &boxMiscPath, BoxDataSave &out);
 
-    // Returns a FrameEnumerator that scans all 32-bit LCRNG seeds via Method 1,
-    // yielding only frames where blockA is at shuffled position 2 (~18.75% pass rate).
-    // Each frame carries the PID and the two IV words from the following RNG calls.
-    static FrameEnumerator makeBlockAPos2Enumerator();
+    // Returns a FrameEnumerator that scans LCRNG seeds in [seedStart, seedEnd] via
+    // Method 1, yielding only frames where blockA is at shuffled position 2.
+    // Default range covers the full 32-bit space.
+    static FrameEnumerator makeBlockAPos2Enumerator(uint32_t seedStart = 0, uint32_t seedEnd = 0xFFFFFFFFu);
+
+    // Same as solve() but splits [0, 0xFFFFFFFF] into numThreads seed ranges and
+    // runs each on its own thread. Pass numThreads=0 to use hardware_concurrency().
+    void solveParallel(const std::vector<std::string> &pokemonFiles, BoxDataSave &boxData, uint16_t targetBoxCRC,
+                       unsigned numThreads = 0);
 
     // Build a chimera for a source pokemon (unshuffled + decrypted canonical form),
     // a collision entry, and a Gen4 Method 1 frame (pid + iv1 + iv2).
     // Applies the frame IVs to the source before shuffling.
     // Returns false if the PID's block order does not place blockA at position 2,
     // or if OW headroom is insufficient.
-    bool buildChimera(Pokemon source, const CollisionEntry &entry, const Gen4Frame &frame, ChimeraSolution &out) const;
+    // If shuffledPlaintextOut is non-null it receives the shuffled + checksum-set but
+    // NOT yet encrypted pokemon, which is needed by sweepBoxCRC.
+    bool buildChimera(Pokemon source, const CollisionEntry &entry, const Gen4Frame &frame, ChimeraSolution &out,
+                      Pokemon *shuffledPlaintextOut = nullptr) const;
 
     // TODO: filter results by minimum IV thresholds
     // TODO: multithreaded search over all 32-bit seeds
@@ -128,6 +149,7 @@ class SaveCorruptionSolver {
   private:
     EncryptoMon &m_em;
     Config m_cfg;
+    mutable std::mutex m_printMutex;
 
     // Base Pokemon in save-file format (canonical → shuffled → encrypted).
     Pokemon m_baseEncrypted;
@@ -136,6 +158,15 @@ class SaveCorruptionSolver {
     uint32_t m_baseDecryptedSum[TOTAL_BLOCK_WORDS + 1];
 
     void printSolution(const std::string &srcFile, const ChimeraSolution &sol) const;
+
+    // Sweep one char pair in the non-OW region of shuffledPlaintext, keeping
+    // their uint16 sum fixed (pokemon checksum invariant), to find a split whose
+    // re-encrypted chimera makes the full BoxDataSave CRC equal targetBoxCRC.
+    // prefixState  = CRC state after processing bytes before the slot.
+    // suffix/suffixLen = bytes after the slot up to (but not including) the footer.
+    // On success fills out with the updated source+chimera and returns true.
+    bool sweepBoxCRC(const Pokemon &shuffledPlaintext, const ChimeraSolution &baseSol, CRCState prefixState,
+                     const uint8_t *suffix, size_t suffixLen, uint16_t targetBoxCRC, ChimeraSolution &out) const;
 
     // Satisfies sum constraints for both the source Pokemon and the chimera
     // using the fields enabled in cfg.tweakFields. Returns false if either

@@ -29,19 +29,26 @@ SaveCorruptionSolver::SaveCorruptionSolver(EncryptoMon &em, Config cfg) : m_em(e
         m_baseDecryptedSum[i + 1] = m_baseDecryptedSum[i] + (uint32_t)(baseData[i] ^ targetMask[i]);
 }
 
-uint16_t SaveCorruptionSolver::crc16CCITT(const uint8_t *data, size_t length) {
-    uint8_t top = 0xFF;
-    uint8_t bot = 0xFF;
+SaveCorruptionSolver::CRCState SaveCorruptionSolver::crc16CCITTUpdate(CRCState s, const uint8_t *data, size_t length) {
     for (size_t i = 0; i < length; i++) {
-        uint32_t x = data[i] ^ top;
+        uint32_t x = data[i] ^ s.top;
         x ^= (x >> 4);
-        top = static_cast<uint8_t>(bot ^ (x >> 3) ^ (x << 4));
-        bot = static_cast<uint8_t>(x ^ (x << 5));
+        s.top = static_cast<uint8_t>(s.bot ^ (x >> 3) ^ (x << 4));
+        s.bot = static_cast<uint8_t>(x ^ (x << 5));
     }
-    return static_cast<uint16_t>((static_cast<uint16_t>(top) << 8) | bot);
+    return s;
 }
 
-bool SaveCorruptionSolver::buildBoxData(EncryptoMon &em, uint32_t currentBoxID, const std::string &boxMiscPath, BoxDataSave &out) {
+uint16_t SaveCorruptionSolver::crc16CCITTFinalize(CRCState s) {
+    return static_cast<uint16_t>((static_cast<uint16_t>(s.top) << 8) | s.bot);
+}
+
+uint16_t SaveCorruptionSolver::crc16CCITT(const uint8_t *data, size_t length) {
+    return crc16CCITTFinalize(crc16CCITTUpdate({}, data, length));
+}
+
+bool SaveCorruptionSolver::buildBoxData(EncryptoMon &em, uint32_t currentBoxID, const std::string &boxMiscPath,
+                                        BoxDataSave &out) {
     static_assert(sizeof(BoxName) == 40, "BoxName size mismatch");
     static_assert(sizeof(BoxBackground) == 1, "BoxBackground size mismatch");
     constexpr size_t MISC_SIZE = sizeof(BoxName) * 18 + sizeof(BoxBackground) * 18;
@@ -222,7 +229,8 @@ bool SaveCorruptionSolver::satisfyChimeraChecksums(Pokemon &shuffled, uint8_t k)
     if (tf.otName)
         adjustChars(48, 48 + m_cfg.otName.maxLen - 1, m_cfg.otName.minCharID, m_cfg.otName.maxCharID, true, deltaNonOW);
     if (tf.nickname)
-        adjustChars(32, 32 + m_cfg.nickname.maxLen - 1, m_cfg.nickname.minCharID, m_cfg.nickname.maxCharID, true, deltaNonOW);
+        adjustChars(32, 32 + m_cfg.nickname.maxLen - 1, m_cfg.nickname.minCharID, m_cfg.nickname.maxCharID, true,
+                    deltaNonOW);
     if (tf.metDate)
         adjustMetDate(true, deltaNonOW);
     if (deltaNonOW != 0)
@@ -232,7 +240,8 @@ bool SaveCorruptionSolver::satisfyChimeraChecksums(Pokemon &shuffled, uint8_t k)
     if (tf.otName)
         adjustChars(48, 48 + m_cfg.otName.maxLen - 1, m_cfg.otName.minCharID, m_cfg.otName.maxCharID, false, deltaOW);
     if (tf.nickname)
-        adjustChars(32, 32 + m_cfg.nickname.maxLen - 1, m_cfg.nickname.minCharID, m_cfg.nickname.maxCharID, false, deltaOW);
+        adjustChars(32, 32 + m_cfg.nickname.maxLen - 1, m_cfg.nickname.minCharID, m_cfg.nickname.maxCharID, false,
+                    deltaOW);
     if (tf.metDate)
         adjustMetDate(false, deltaOW);
     if (deltaOW != 0)
@@ -242,7 +251,7 @@ bool SaveCorruptionSolver::satisfyChimeraChecksums(Pokemon &shuffled, uint8_t k)
 }
 
 bool SaveCorruptionSolver::buildChimera(Pokemon source, const CollisionEntry &entry, const Gen4Frame &frame,
-                                        ChimeraSolution &out) const {
+                                        ChimeraSolution &out, Pokemon *shuffledPlaintextOut) const {
     uint8_t order = static_cast<uint8_t>(((frame.pid & 0x3E000) >> 13) % 24);
     if (blockAPositions[order] != 2)
         return false;
@@ -251,10 +260,27 @@ bool SaveCorruptionSolver::buildChimera(Pokemon source, const CollisionEntry &en
     {
         BlockB *bb = reinterpret_cast<BlockB *>(&source.block_data[1]);
         uint32_t flags = bb->individualValues & 0xC0000000u;
-        bb->individualValues = (static_cast<uint32_t>(frame.iv1 & 0x7FFFu) | (static_cast<uint32_t>(frame.iv2 & 0x7FFFu) << 15)) | flags;
+        bb->individualValues =
+            (static_cast<uint32_t>(frame.iv1 & 0x7FFFu) | (static_cast<uint32_t>(frame.iv2 & 0x7FFFu) << 15)) | flags;
     }
 
     source.pid = frame.pid;
+
+    // Expand name slots to the language maximum so satisfyChimeraChecksums and
+    // sweepBoxCRC have all positions available, not just what the source file used.
+    {
+        auto clampToRange = [](uint16_t *name, int maxLen, uint16_t minC, uint16_t maxC) {
+            for (int i = 0; i < maxLen; ++i)
+                if (name[i] < minC || name[i] > maxC)
+                    name[i] = minC;
+            name[maxLen] = 0xFFFF;
+        };
+        clampToRange(reinterpret_cast<BlockC *>(&source.block_data[2])->nickname, m_cfg.nickname.maxLen,
+                     m_cfg.nickname.minCharID, m_cfg.nickname.maxCharID);
+        clampToRange(reinterpret_cast<BlockD *>(&source.block_data[3])->otName, m_cfg.otName.maxLen,
+                     m_cfg.otName.minCharID, m_cfg.otName.maxCharID);
+    }
+
     m_em.shuffleBlocks(source);
 
     uint8_t L = entry.overwriteLen;
@@ -266,6 +292,8 @@ bool SaveCorruptionSolver::buildChimera(Pokemon source, const CollisionEntry &en
         return false;
 
     source.checksum = m_cfg.targetChecksum;
+    if (shuffledPlaintextOut)
+        *shuffledPlaintextOut = source;
     m_em.encryptPokemon(source);
 
     Pokemon chimera = m_baseEncrypted;
@@ -281,15 +309,17 @@ bool SaveCorruptionSolver::buildChimera(Pokemon source, const CollisionEntry &en
     return true;
 }
 
-SaveCorruptionSolver::FrameEnumerator SaveCorruptionSolver::makeBlockAPos2Enumerator() {
+SaveCorruptionSolver::FrameEnumerator SaveCorruptionSolver::makeBlockAPos2Enumerator(uint32_t seedStart,
+                                                                                     uint32_t seedEnd) {
     struct State {
-        uint32_t seed = 0;
-        bool exhausted = false;
+        uint32_t seed;
+        uint32_t end;
+        bool exhausted;
     };
-    return [s = State{}](Gen4Frame &out) mutable -> bool {
+    return [s = State{seedStart, seedEnd, false}](Gen4Frame &out) mutable -> bool {
         while (!s.exhausted) {
             uint32_t s0 = s.seed;
-            if (s.seed == 0xFFFFFFFFu)
+            if (s.seed == s.end)
                 s.exhausted = true;
             else
                 ++s.seed;
@@ -310,8 +340,113 @@ SaveCorruptionSolver::FrameEnumerator SaveCorruptionSolver::makeBlockAPos2Enumer
     };
 }
 
-void SaveCorruptionSolver::solve(const std::vector<std::string> &pokemonFiles, FrameEnumerator nextFrame) {
+bool SaveCorruptionSolver::sweepBoxCRC(const Pokemon &shuffledPlaintext, const ChimeraSolution &baseSol,
+                                       CRCState prefixState, const uint8_t *suffix, size_t suffixLen,
+                                       uint16_t targetBoxCRC, ChimeraSolution &out) const {
+    uint8_t order = baseSol.blockOrder;
+    uint8_t k =
+        static_cast<uint8_t>(baseSol.overwriteLen > HEADER_BYTES ? (baseSol.overwriteLen - HEADER_BYTES) / 2 : 0);
+
+    const uint16_t *bd = reinterpret_cast<const uint16_t *>(shuffledPlaintext.block_data);
+
+    struct CharPos {
+        uint8_t sw;
+        uint16_t minC, maxC;
+    };
+    std::vector<CharPos> positions;
+
+    auto collect = [&](int canonStart, int canonEnd, uint16_t minC, uint16_t maxC) {
+        for (int c = canonStart; c <= canonEnd; ++c) {
+            uint8_t sw = canonicalToShuffled(static_cast<uint8_t>(c), order);
+            if (sw >= k)
+                continue; // only OW chars end up in the chimera's copied bytes
+            uint16_t val = bd[sw];
+            if (val < minC || val > maxC)
+                continue;
+            positions.push_back({sw, minC, maxC});
+        }
+    };
+
+    if (m_cfg.tweakFields.otName)
+        collect(48, 48 + m_cfg.otName.maxLen - 1, m_cfg.otName.minCharID, m_cfg.otName.maxCharID);
+    if (m_cfg.tweakFields.nickname)
+        collect(32, 32 + m_cfg.nickname.maxLen - 1, m_cfg.nickname.minCharID, m_cfg.nickname.maxCharID);
+
+    // Try all pairs (i, j) with i > j; iterate from the back since those chars are
+    // less likely to have been pushed to their extremes by satisfyChimeraChecksums.
+    for (int i = static_cast<int>(positions.size()) - 1; i >= 1; --i) {
+        for (int j = i - 1; j >= 0; --j) {
+            const CharPos &p1 = positions[i];
+            const CharPos &p2 = positions[j];
+            uint32_t S = static_cast<uint32_t>(bd[p1.sw]) + static_cast<uint32_t>(bd[p2.sw]);
+
+            // c1 ∈ [p1.minC, p1.maxC] and c2 = S-c1 ∈ [p2.minC, p2.maxC]
+            uint32_t lo = std::max((uint32_t)p1.minC, S > p2.maxC ? S - p2.maxC : 0u);
+            uint32_t hi = std::min((uint32_t)p1.maxC, S >= p2.minC ? S - (uint32_t)p2.minC : 0u);
+
+            if (lo > hi || hi > 0xFFFFu)
+                continue;
+
+            for (uint16_t c1 = static_cast<uint16_t>(lo); c1 <= static_cast<uint16_t>(hi); ++c1) {
+                uint16_t c2 = static_cast<uint16_t>(S - c1);
+
+                Pokemon candidate = shuffledPlaintext;
+                uint16_t *cbd = reinterpret_cast<uint16_t *>(candidate.block_data);
+                cbd[p1.sw] = c1;
+                cbd[p2.sw] = c2;
+                m_em.encryptPokemon(candidate);
+
+                Pokemon chimera = m_baseEncrypted;
+                memcpy(&chimera, &candidate, baseSol.overwriteLen);
+
+                CRCState state =
+                    crc16CCITTUpdate(prefixState, reinterpret_cast<const uint8_t *>(&chimera), POKEMON_BYTES);
+                state = crc16CCITTUpdate(state, suffix, suffixLen);
+                uint16_t gotCRC = crc16CCITTFinalize(state);
+
+                if (gotCRC != targetBoxCRC)
+                    continue;
+
+                out = baseSol;
+                out.source = candidate;
+                out.chimera = chimera;
+                return true;
+            }
+        }
+    }
+    return false;
+}
+
+void SaveCorruptionSolver::solve(const std::vector<std::string> &pokemonFiles, FrameEnumerator nextFrame,
+                                 BoxDataSave &boxData, uint16_t targetBoxCRC) {
     auto collisions = findValidCollisions();
+
+    // Precompute per-slot CRC prefix states and suffix span.
+    // prefixStates[id] = CRC state after bytes [0, slotOffset) with currentBoxID = id.
+    // The first 4 bytes (currentBoxID) vary; the rest come from the immutable boxData.
+    static constexpr uint32_t NUM_BOXES = 18;
+    struct SlotInfo {
+        std::array<CRCState, NUM_BOXES> prefixStates;
+        uint32_t slotOffset;
+        size_t suffixLen;
+    };
+    constexpr size_t CRC_LEN = offsetof(BoxDataSave, footer);
+    const uint8_t *boxBytes = reinterpret_cast<const uint8_t *>(&boxData);
+
+    std::vector<SlotInfo> slotInfos;
+    slotInfos.reserve(collisions.size());
+    for (const auto &col : collisions) {
+        uint32_t slotOffset = BOX_HEADER_BYTES + col.pokemonIndex * POKEMON_BYTES;
+        SlotInfo info;
+        info.slotOffset = slotOffset;
+        info.suffixLen = CRC_LEN - slotOffset - POKEMON_BYTES;
+        for (uint32_t bid = 0; bid < NUM_BOXES; ++bid) {
+            CRCState s = crc16CCITTUpdate({}, reinterpret_cast<const uint8_t *>(&bid), BOX_HEADER_BYTES);
+            s = crc16CCITTUpdate(s, boxBytes + BOX_HEADER_BYTES, slotOffset - BOX_HEADER_BYTES);
+            info.prefixStates[bid] = s;
+        }
+        slotInfos.push_back(info);
+    }
 
     // Load and validate all source pokemon upfront so we only read files once.
     struct Source {
@@ -345,18 +480,70 @@ void SaveCorruptionSolver::solve(const std::vector<std::string> &pokemonFiles, F
     Gen4Frame frame;
     while (nextFrame(frame)) {
         for (const auto &s : sources) {
-            for (const auto &collision : collisions) {
+            for (size_t ci = 0; ci < collisions.size(); ++ci) {
                 ChimeraSolution sol;
-                if (buildChimera(s.src, collision, frame, sol))
-                    printSolution(s.file, sol);
+                Pokemon shuffledPlaintext;
+                if (!buildChimera(s.src, collisions[ci], frame, sol, &shuffledPlaintext))
+                    continue;
+
+                const SlotInfo &info = slotInfos[ci];
+                const uint8_t *suffix = boxBytes + info.slotOffset + POKEMON_BYTES;
+
+                uint32_t bidStart = m_cfg.tweakFields.currentBoxID ? 0 : boxData.data.currentBoxID;
+                uint32_t bidEnd = m_cfg.tweakFields.currentBoxID ? NUM_BOXES - 1 : boxData.data.currentBoxID;
+
+                for (uint32_t bid = bidStart; bid <= bidEnd; ++bid) {
+                    const CRCState &prefix = info.prefixStates[bid];
+
+                    // Fast path: chimera as-is already hits the target CRC.
+                    CRCState state =
+                        crc16CCITTUpdate(prefix, reinterpret_cast<const uint8_t *>(&sol.chimera), POKEMON_BYTES);
+                    state = crc16CCITTUpdate(state, suffix, info.suffixLen);
+                    if (crc16CCITTFinalize(state) == targetBoxCRC) {
+                        sol.boxID = bid;
+                        printSolution(s.file, sol);
+                        continue;
+                    }
+
+                    // Slow path: sweep a char pair in the OW region.
+                    ChimeraSolution solCRC;
+                    if (sweepBoxCRC(shuffledPlaintext, sol, prefix, suffix, info.suffixLen, targetBoxCRC, solCRC)) {
+                        solCRC.boxID = bid;
+                        printSolution(s.file, solCRC);
+                    }
+                }
             }
         }
     }
 }
 
+void SaveCorruptionSolver::solveParallel(const std::vector<std::string> &pokemonFiles, BoxDataSave &boxData,
+                                         uint16_t targetBoxCRC, unsigned numThreads) {
+    if (numThreads == 0)
+        numThreads = std::max(1u, std::thread::hardware_concurrency());
+
+    uint64_t chunkSize = 0x100000000ULL / numThreads;
+    std::vector<std::thread> threads;
+    threads.reserve(numThreads);
+
+    for (unsigned t = 0; t < numThreads; ++t) {
+        uint32_t start = static_cast<uint32_t>(t * chunkSize);
+        uint32_t end = (t == numThreads - 1) ? 0xFFFFFFFFu : static_cast<uint32_t>((t + 1) * chunkSize - 1);
+        threads.emplace_back([this, &pokemonFiles, &boxData, targetBoxCRC, start, end]() {
+            solve(pokemonFiles, makeBlockAPos2Enumerator(start, end), boxData, targetBoxCRC);
+        });
+    }
+
+    for (auto &th : threads)
+        th.join();
+}
+
 void SaveCorruptionSolver::printSolution(const std::string &srcFile, const ChimeraSolution &sol) const {
+    std::lock_guard<std::mutex> lock(m_printMutex);
     uint32_t box = sol.pokemonIndex / 30;
     uint32_t slot = sol.pokemonIndex % 30;
+    uint32_t col = slot % 6;
+    uint32_t row = slot / 6;
 
     auto printHex = [](const Pokemon &p) {
         const uint8_t *b = reinterpret_cast<const uint8_t *>(&p);
