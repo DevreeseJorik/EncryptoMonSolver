@@ -3,6 +3,7 @@
 
 #include <algorithm>
 #include <cstring>
+#include <fstream>
 #include <iomanip>
 #include <iostream>
 
@@ -26,6 +27,59 @@ SaveCorruptionSolver::SaveCorruptionSolver(EncryptoMon &em, Config cfg) : m_em(e
     m_baseDecryptedSum[0] = 0;
     for (int i = 0; i < TOTAL_BLOCK_WORDS; ++i)
         m_baseDecryptedSum[i + 1] = m_baseDecryptedSum[i] + (uint32_t)(baseData[i] ^ targetMask[i]);
+}
+
+uint16_t SaveCorruptionSolver::crc16CCITT(const uint8_t *data, size_t length) {
+    uint8_t top = 0xFF;
+    uint8_t bot = 0xFF;
+    for (size_t i = 0; i < length; i++) {
+        uint32_t x = data[i] ^ top;
+        x ^= (x >> 4);
+        top = static_cast<uint8_t>(bot ^ (x >> 3) ^ (x << 4));
+        bot = static_cast<uint8_t>(x ^ (x << 5));
+    }
+    return static_cast<uint16_t>((static_cast<uint16_t>(top) << 8) | bot);
+}
+
+bool SaveCorruptionSolver::buildBoxData(EncryptoMon &em, uint32_t currentBoxID, const std::string &boxMiscPath, BoxDataSave &out) {
+    static_assert(sizeof(BoxName) == 40, "BoxName size mismatch");
+    static_assert(sizeof(BoxBackground) == 1, "BoxBackground size mismatch");
+    constexpr size_t MISC_SIZE = sizeof(BoxName) * 18 + sizeof(BoxBackground) * 18;
+
+    if (currentBoxID > 17) {
+        std::cerr << "buildBoxData: currentBoxID " << currentBoxID << " out of range [0,17]\n";
+        return false;
+    }
+
+    std::ifstream f(boxMiscPath, std::ios::binary);
+    if (!f) {
+        std::cerr << "buildBoxData: cannot open " << boxMiscPath << "\n";
+        return false;
+    }
+    uint8_t misc[MISC_SIZE];
+    f.read(reinterpret_cast<char *>(misc), MISC_SIZE);
+    if (static_cast<size_t>(f.gcount()) != MISC_SIZE) {
+        std::cerr << "buildBoxData: expected " << MISC_SIZE << " bytes, got " << f.gcount() << "\n";
+        return false;
+    }
+
+    // Build a properly encrypted empty pokemon: all block fields zero, then
+    // shuffled (block order for pid=0) and XOR-encrypted with the stream
+    // derived from checksum=0. This is what the game writes for unused slots.
+    em.generateXORMasks();
+    Pokemon emptySlot = {};
+    em.setChecksum(emptySlot);
+    em.shuffleBlocks(emptySlot);
+    em.encryptPokemon(emptySlot);
+
+    out = {};
+    out.data.currentBoxID = currentBoxID;
+    for (auto &box : out.data.boxes)
+        for (auto &slot : box.pokemon)
+            slot = emptySlot;
+    std::memcpy(out.data.boxNames, misc, sizeof(BoxName) * 18);
+    std::memcpy(out.data.boxBackgrounds, misc + sizeof(BoxName) * 18, sizeof(BoxBackground) * 18);
+    return true;
 }
 
 std::vector<CollisionEntry> SaveCorruptionSolver::findValidCollisions() const {
@@ -166,9 +220,9 @@ bool SaveCorruptionSolver::satisfyChimeraChecksums(Pokemon &shuffled, uint8_t k)
         deltaNonOW = 0;
     }
     if (tf.otName)
-        adjustChars(48, 55, m_cfg.otName.minCharID, m_cfg.otName.maxCharID, true, deltaNonOW);
+        adjustChars(48, 48 + m_cfg.otName.maxLen - 1, m_cfg.otName.minCharID, m_cfg.otName.maxCharID, true, deltaNonOW);
     if (tf.nickname)
-        adjustChars(32, 42, m_cfg.nickname.minCharID, m_cfg.nickname.maxCharID, true, deltaNonOW);
+        adjustChars(32, 32 + m_cfg.nickname.maxLen - 1, m_cfg.nickname.minCharID, m_cfg.nickname.maxCharID, true, deltaNonOW);
     if (tf.metDate)
         adjustMetDate(true, deltaNonOW);
     if (deltaNonOW != 0)
@@ -176,9 +230,9 @@ bool SaveCorruptionSolver::satisfyChimeraChecksums(Pokemon &shuffled, uint8_t k)
 
     // OW region
     if (tf.otName)
-        adjustChars(48, 55, m_cfg.otName.minCharID, m_cfg.otName.maxCharID, false, deltaOW);
+        adjustChars(48, 48 + m_cfg.otName.maxLen - 1, m_cfg.otName.minCharID, m_cfg.otName.maxCharID, false, deltaOW);
     if (tf.nickname)
-        adjustChars(32, 42, m_cfg.nickname.minCharID, m_cfg.nickname.maxCharID, false, deltaOW);
+        adjustChars(32, 32 + m_cfg.nickname.maxLen - 1, m_cfg.nickname.minCharID, m_cfg.nickname.maxCharID, false, deltaOW);
     if (tf.metDate)
         adjustMetDate(false, deltaOW);
     if (deltaOW != 0)
@@ -275,11 +329,11 @@ void SaveCorruptionSolver::solve(const std::vector<std::string> &pokemonFiles, F
         m_em.decryptPokemon(src);
         m_em.unshuffleBlocks(src);
 
-        if (!m_em.isNicknameValid(src, m_cfg.nickname.minCharID, m_cfg.nickname.maxCharID)) {
+        if (!m_em.isNicknameValid(src, m_cfg.nickname.minCharID, m_cfg.nickname.maxCharID, m_cfg.nickname.maxLen)) {
             std::cout << "Skipping " << file << ": nickname out of char range\n";
             continue;
         }
-        if (!m_em.isOTNameValid(src, m_cfg.otName.minCharID, m_cfg.otName.maxCharID)) {
+        if (!m_em.isOTNameValid(src, m_cfg.otName.minCharID, m_cfg.otName.maxCharID, m_cfg.otName.maxLen)) {
             std::cout << "Skipping " << file << ": OT name out of char range\n";
             continue;
         }
